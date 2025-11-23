@@ -1,56 +1,159 @@
 import { useState } from "react";
 
 export default function App() {
-  const [tareas, setTareas] = useState([]);
+  const [tareas, setTareas] = useState({
+    todo: [],
+    proceso: [],
+    delegadas: []
+  });
+
   const [texto, setTexto] = useState("");
-  const [editId, setEditId] = useState(null);
+  const [editando, setEditando] = useState(null);
   const [editText, setEditText] = useState("");
 
-  // Agregar tarea
+  // -----------------------------
+  //   AGREGAR TAREA
+  // -----------------------------
   const agregarTarea = () => {
     if (!texto.trim()) return;
 
-    setTareas([
-      ...tareas,
-      { id: Date.now(), texto }
-    ]);
+    setTareas((prev) => ({
+      ...prev,
+      todo: [...prev.todo, { id: Date.now(), texto }]
+    }));
 
     setTexto("");
   };
 
-  // Borrar tarea
-  const borrarTarea = (id) => {
-    setTareas(tareas.filter(t => t.id !== id));
+  // -----------------------------
+  //   BORRAR TAREA
+  // -----------------------------
+  const borrarTarea = (columna, id) => {
+    setTareas((prev) => ({
+      ...prev,
+      [columna]: prev[columna].filter((t) => t.id !== id),
+    }));
   };
 
-  // Activar modo edición
-  const editarTarea = (tarea) => {
-    setEditId(tarea.id);
+  // -----------------------------
+  //   EDITAR TAREA
+  // -----------------------------
+  const iniciarEdicion = (tarea, columna) => {
+    setEditando({ id: tarea.id, columna });
     setEditText(tarea.texto);
   };
 
-  // Guardar cambios de edición
   const guardarEdicion = () => {
-    if (!editText.trim()) return;
+    setTareas((prev) => {
+      const col = editando.columna;
 
-    setTareas(
-      tareas.map(t =>
-        t.id === editId ? { ...t, texto: editText } : t
-      )
-    );
-    setEditId(null);
+      return {
+        ...prev,
+        [col]: prev[col].map((t) =>
+          t.id === editando.id ? { ...t, texto: editText } : t
+        )
+      };
+    });
+
+    setEditando(null);
     setEditText("");
   };
 
-  return (
-    <div style={{ padding: 20, maxWidth: 400, margin: "auto" }}>
-      <h2>Lista de Tareas</h2>
+  // -----------------------------
+  //   DRAG & DROP
+  // -----------------------------
 
-      {/* Input agregar tarea */}
-      <div>
+  const onDragStart = (e, tarea, columna) => {
+    e.dataTransfer.setData("tareaId", tarea.id);
+    e.dataTransfer.setData("columna", columna);
+  };
+
+  const onDrop = (e, columnaDestino) => {
+    const id = Number(e.dataTransfer.getData("tareaId"));
+    const columnaOrigen = e.dataTransfer.getData("columna");
+
+    if (columnaOrigen === columnaDestino) return;
+
+    const tareaMovida = tareas[columnaOrigen].find((t) => t.id === id);
+
+    setTareas((prev) => ({
+      ...prev,
+      [columnaOrigen]: prev[columnaOrigen].filter((t) => t.id !== id),
+      [columnaDestino]: [...prev[columnaDestino], tareaMovida]
+    }));
+  };
+
+  const allowDrop = (e) => e.preventDefault();
+
+  // -----------------------------
+  //   UI TARJETA
+  // -----------------------------
+  const renderTarea = (t, columna) => {
+    const enEdicion = editando && editando.id === t.id;
+
+    return (
+      <div
+        key={t.id}
+        draggable={!enEdicion}
+        onDragStart={(e) => onDragStart(e, t, columna)}
+        style={{
+          background: "#fff",
+          padding: 10,
+          marginBottom: 10,
+          borderRadius: 8,
+          boxShadow: "0 2px 6px rgba(0,0,0,0.1)"
+        }}
+      >
+        {enEdicion ? (
+          <>
+            <input
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              style={{ width: "90%" }}
+            />
+            <br />
+            <button onClick={guardarEdicion}>Guardar</button>
+            <button onClick={() => setEditando(null)} style={{ marginLeft: 5 }}>
+              Cancelar
+            </button>
+          </>
+        ) : (
+          <>
+            <p>{t.texto}</p>
+
+            <button onClick={() => iniciarEdicion(t, columna)}>
+              Editar
+            </button>
+
+            <button
+              onClick={() => borrarTarea(columna, t.id)}
+              style={{ marginLeft: 5 }}
+            >
+              Borrar
+            </button>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  // -----------------------------
+  //   RENDER
+  // -----------------------------
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 20,
+        padding: 20,
+        background: "#f5f5f5",
+        minHeight: "100vh"
+      }}
+    >
+      {/* INPUT NUEVA TAREA */}
+      <div style={{ position: "fixed", top: 10, left: 10 }}>
         <input
-          type="text"
-          placeholder="Nueva tarea..."
+          placeholder="Nueva tarea"
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
         />
@@ -59,43 +162,31 @@ export default function App() {
         </button>
       </div>
 
-      {/* Lista de tareas */}
-      <ul style={{ marginTop: 20 }}>
-        {tareas.map((t) => (
-          <li key={t.id} style={{ marginBottom: 10 }}>
-            {editId === t.id ? (
-              <>
-                <input
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                />
-                <button onClick={guardarEdicion} style={{ marginLeft: 5 }}>
-                  Guardar
-                </button>
-                <button onClick={() => setEditId(null)} style={{ marginLeft: 5 }}>
-                  Cancelar
-                </button>
-              </>
-            ) : (
-              <>
-                {t.texto}
-                <button
-                  onClick={() => editarTarea(t)}
-                  style={{ marginLeft: 10 }}
-                >
-                  Editar
-                </button>
-                <button
-                  onClick={() => borrarTarea(t.id)}
-                  style={{ marginLeft: 5 }}
-                >
-                  Borrar
-                </button>
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
+      {/* COLUMNAS */}
+      {["todo", "proceso", "delegadas"].map((col) => (
+        <div
+          key={col}
+          onDragOver={allowDrop}
+          onDrop={(e) => onDrop(e, col)}
+          style={{
+            flex: 1,
+            background: "#eaeaea",
+            padding: 10,
+            borderRadius: 10,
+            marginTop: 60
+          }}
+        >
+          <h3 style={{ textTransform: "capitalize", textAlign: "center" }}>
+            {col === "todo"
+              ? "To-Do"
+              : col === "proceso"
+              ? "Proceso"
+              : "Delegadas"}
+          </h3>
+
+          {tareas[col].map((t) => renderTarea(t, col))}
+        </div>
+      ))}
     </div>
   );
 }

@@ -1,33 +1,66 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
 export default function App() {
-  const [tasks, setTasks] = useState({
-    todo: [
-      { id: "1", text: "Tarea 1" },
-      { id: "2", text: "Tarea 2" },
-    ],
-    proceso: [
-      { id: "3", text: "Tarea 3 en proceso" },
-    ],
-    delegadas: [
-      { id: "4", text: "Tarea delegada" },
-    ],
-  });
+
+  // ---------------------------
+  //   LOCAL STORAGE: CARGAR
+  // ---------------------------
+  const loadTasks = () => {
+    const saved = localStorage.getItem("tasks-board");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const [tasks, setTasks] = useState(
+    loadTasks() || {
+      todo: [
+        { id: "1", text: "Tarea 1" },
+        { id: "2", text: "Tarea 2" },
+      ],
+      proceso: [{ id: "3", text: "Tarea 3 en proceso" }],
+      delegadas: [{ id: "4", text: "Tarea delegada" }],
+    }
+  );
 
   const [newTask, setNewTask] = useState("");
 
-  const handleDragEnd = (result) => {
-    if (!result.destination) return;
+  // ---------------------------
+  //   LOCAL STORAGE: GUARDAR
+  // ---------------------------
+  useEffect(() => {
+    localStorage.setItem("tasks-board", JSON.stringify(tasks));
+  }, [tasks]);
 
+  // ---------------------------
+  //   DRAG & DROP
+  // ---------------------------
+  const handleDragEnd = (result) => {
     const sourceColumn = result.source.droppableId;
+
+    // 🔥 Si no hay destino → la soltó fuera → eliminar tarea
+    if (!result.destination) {
+      setTasks((prev) => ({
+        ...prev,
+        [sourceColumn]: prev[sourceColumn].filter(
+          (t, index) => index !== result.source.index
+        ),
+      }));
+      return;
+    }
+
     const destColumn = result.destination.droppableId;
 
     const sourceTasks = Array.from(tasks[sourceColumn]);
     const destTasks = Array.from(tasks[destColumn]);
 
     const [movedTask] = sourceTasks.splice(result.source.index, 1);
-
     destTasks.splice(result.destination.index, 0, movedTask);
 
     setTasks({
@@ -37,6 +70,9 @@ export default function App() {
     });
   };
 
+  // ---------------------------
+  //   AGREGAR TAREA
+  // ---------------------------
   const addTask = () => {
     if (!newTask.trim()) return;
 
@@ -51,6 +87,9 @@ export default function App() {
     setNewTask("");
   };
 
+  // ---------------------------
+  //   UI
+  // ---------------------------
   return (
     <div className="min-h-screen bg-gray-100 p-6">
       <h1 className="text-3xl font-bold text-center mb-6">Gestor de Tareas</h1>
@@ -173,4 +212,4 @@ export default function App() {
       </DragDropContext>
     </div>
   );
-      }
+}

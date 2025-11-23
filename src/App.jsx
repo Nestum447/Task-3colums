@@ -1,176 +1,101 @@
 import { useState } from "react";
-import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
 export default function App() {
-  const [tasks, setTasks] = useState({
-    todo: [
-      { id: "1", text: "Tarea 1" },
-      { id: "2", text: "Tarea 2" },
-    ],
-    proceso: [
-      { id: "3", text: "Tarea 3 en proceso" },
-    ],
-    delegadas: [
-      { id: "4", text: "Tarea delegada" },
-    ],
-  });
+  const [tareas, setTareas] = useState([]);
+  const [texto, setTexto] = useState("");
+  const [editId, setEditId] = useState(null);
+  const [editText, setEditText] = useState("");
 
-  const [newTask, setNewTask] = useState("");
+  // Agregar tarea
+  const agregarTarea = () => {
+    if (!texto.trim()) return;
 
-  const handleDragEnd = (result) => {
-    if (!result.destination) return;
+    setTareas([
+      ...tareas,
+      { id: Date.now(), texto }
+    ]);
 
-    const sourceColumn = result.source.droppableId;
-    const destColumn = result.destination.droppableId;
-
-    const sourceTasks = Array.from(tasks[sourceColumn]);
-    const destTasks = Array.from(tasks[destColumn]);
-
-    const [movedTask] = sourceTasks.splice(result.source.index, 1);
-
-    destTasks.splice(result.destination.index, 0, movedTask);
-
-    setTasks({
-      ...tasks,
-      [sourceColumn]: sourceTasks,
-      [destColumn]: destTasks,
-    });
+    setTexto("");
   };
 
-  const addTask = () => {
-    if (!newTask.trim()) return;
+  // Borrar tarea
+  const borrarTarea = (id) => {
+    setTareas(tareas.filter(t => t.id !== id));
+  };
 
-    const newId = Date.now().toString();
-    const newItem = { id: newId, text: newTask };
+  // Activar modo edición
+  const editarTarea = (tarea) => {
+    setEditId(tarea.id);
+    setEditText(tarea.texto);
+  };
 
-    setTasks({
-      ...tasks,
-      todo: [...tasks.todo, newItem],
-    });
+  // Guardar cambios de edición
+  const guardarEdicion = () => {
+    if (!editText.trim()) return;
 
-    setNewTask("");
+    setTareas(
+      tareas.map(t =>
+        t.id === editId ? { ...t, texto: editText } : t
+      )
+    );
+    setEditId(null);
+    setEditText("");
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <h1 className="text-3xl font-bold text-center mb-6">Gestor de Tareas</h1>
+    <div style={{ padding: 20, maxWidth: 400, margin: "auto" }}>
+      <h2>Lista de Tareas</h2>
 
-      {/* Input para nueva tarea */}
-      <div className="flex justify-center mb-6 gap-2">
+      {/* Input agregar tarea */}
+      <div>
         <input
           type="text"
-          className="border border-gray-400 rounded p-2 w-64"
           placeholder="Nueva tarea..."
-          value={newTask}
-          onChange={(e) => setNewTask(e.target.value)}
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
         />
-        <button
-          onClick={addTask}
-          className="bg-blue-600 text-white px-4 py-2 rounded"
-        >
+        <button onClick={agregarTarea} style={{ marginLeft: 5 }}>
           Agregar
         </button>
       </div>
 
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-          {/* Columna To Do */}
-          <Droppable droppableId="todo">
-            {(provided) => (
-              <div
-                className="bg-white p-4 rounded shadow min-h-[300px]"
-                ref={provided.innerRef}
-                {...provided.droppableProps}
-              >
-                <h2 className="text-xl font-semibold mb-3 text-blue-700">To Do</h2>
-
-                {tasks.todo.map((task, index) => (
-                  <Draggable key={task.id} draggableId={task.id} index={index}>
-                    {(provided) => (
-                      <div
-                        className="p-3 bg-blue-100 rounded mb-2 shadow cursor-grab active:cursor-grabbing"
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                      >
-                        {task.text}
-                      </div>
-                    )}
-                  </Draggable>
-                ))}
-
-                {provided.placeholder}
-              </div>
+      {/* Lista de tareas */}
+      <ul style={{ marginTop: 20 }}>
+        {tareas.map((t) => (
+          <li key={t.id} style={{ marginBottom: 10 }}>
+            {editId === t.id ? (
+              <>
+                <input
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                />
+                <button onClick={guardarEdicion} style={{ marginLeft: 5 }}>
+                  Guardar
+                </button>
+                <button onClick={() => setEditId(null)} style={{ marginLeft: 5 }}>
+                  Cancelar
+                </button>
+              </>
+            ) : (
+              <>
+                {t.texto}
+                <button
+                  onClick={() => editarTarea(t)}
+                  style={{ marginLeft: 10 }}
+                >
+                  Editar
+                </button>
+                <button
+                  onClick={() => borrarTarea(t.id)}
+                  style={{ marginLeft: 5 }}
+                >
+                  Borrar
+                </button>
+              </>
             )}
-          </Droppable>
-
-          {/* Columna Proceso */}
-          <Droppable droppableId="proceso">
-            {(provided) => (
-              <div
-                className="bg-white p-4 rounded shadow min-h-[300px]"
-                ref={provided.innerRef}
-                {...provided.droppableProps}
-              >
-                <h2 className="text-xl font-semibold mb-3 text-yellow-600">
-                  En Proceso
-                </h2>
-
-                {tasks.proceso.map((task, index) => (
-                  <Draggable key={task.id} draggableId={task.id} index={index}>
-                    {(provided) => (
-                      <div
-                        className="p-3 bg-yellow-100 rounded mb-2 shadow cursor-grab active:cursor-grabbing"
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                      >
-                        {task.text}
-                      </div>
-                    )}
-                  </Draggable>
-                ))}
-
-                {provided.placeholder}
-              </div>
-            )}
-          </Droppable>
-
-          {/* Columna Delegadas */}
-          <Droppable droppableId="delegadas">
-            {(provided) => (
-              <div
-                className="bg-white p-4 rounded shadow min-h-[300px]"
-                ref={provided.innerRef}
-                {...provided.droppableProps}
-              >
-                <h2 className="text-xl font-semibold mb-3 text-green-700">
-                  Delegadas
-                </h2>
-
-                {tasks.delegadas.map((task, index) => (
-                  <Draggable key={task.id} draggableId={task.id} index={index}>
-                    {(provided) => (
-                      <div
-                        className="p-3 bg-green-100 rounded mb-2 shadow cursor-grab active:cursor-grabbing"
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                      >
-                        {task.text}
-                      </div>
-                    )}
-                  </Draggable>
-                ))}
-
-                {provided.placeholder}
-              </div>
-            )}
-          </Droppable>
-
-        </div>
-      </DragDropContext>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

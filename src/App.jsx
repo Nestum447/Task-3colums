@@ -44,8 +44,8 @@ export default function App() {
   const handleDragEnd = (result) => {
     const sourceColumn = result.source.droppableId;
 
-    // 🔥 Si no hay destino → la soltó fuera → eliminar tarea
-    if (!result.destination) {
+    // 🔥 CANASTA: si suelta en el área "delete", eliminar tarea
+    if (result.destination?.droppableId === "delete") {
       setTasks((prev) => ({
         ...prev,
         [sourceColumn]: prev[sourceColumn].filter(
@@ -54,6 +54,9 @@ export default function App() {
       }));
       return;
     }
+
+    // 🔥 Si no hay destino (soltó fuera) → NO elimina ahora (solo canasta)
+    if (!result.destination) return;
 
     const destColumn = result.destination.droppableId;
 
@@ -209,6 +212,21 @@ export default function App() {
           </Droppable>
 
         </div>
+
+        {/* 🗑️ CANASTA PARA BORRAR */}
+        <Droppable droppableId="delete">
+          {(provided) => (
+            <div
+              className="mt-10 mx-auto w-40 h-40 rounded-full bg-red-200 border-4 border-red-500 flex items-center justify-center text-2xl font-bold shadow"
+              ref={provided.innerRef}
+              {...provided.droppableProps}
+            >
+              🗑️
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+
       </DragDropContext>
     </div>
   );

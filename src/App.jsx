@@ -1,233 +1,173 @@
-import { useState, useEffect } from "react";
-import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
+import React, { useState, useEffect } from "react";
 
 export default function App() {
-
-  // ---------------------------
-  //   LOCAL STORAGE: CARGAR
-  // ---------------------------
-  const loadTasks = () => {
-    const saved = localStorage.getItem("tasks-board");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  };
-
-  const [tasks, setTasks] = useState(
-    loadTasks() || {
-      todo: [
-        { id: "1", text: "Tarea 1" },
-        { id: "2", text: "Tarea 2" },
-      ],
-      proceso: [{ id: "3", text: "Tarea 3 en proceso" }],
-      delegadas: [{ id: "4", text: "Tarea delegada" }],
-    }
-  );
-
+  const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
+  const [draggingTask, setDraggingTask] = useState(null);
 
-  // ---------------------------
-  //   LOCAL STORAGE: GUARDAR
-  // ---------------------------
+  const columns = ["todo", "proceso", "delegadas"];
+
+  // -------------------------
+  // LOAD FROM LOCAL STORAGE
+  // -------------------------
   useEffect(() => {
-    localStorage.setItem("tasks-board", JSON.stringify(tasks));
+    const saved = localStorage.getItem("tasks");
+    if (saved) setTasks(JSON.parse(saved));
+  }, []);
+
+  // -------------------------
+  // SAVE TO LOCAL STORAGE
+  // -------------------------
+  useEffect(() => {
+    localStorage.setItem("tasks", JSON.stringify(tasks));
   }, [tasks]);
 
-  // ---------------------------
-  //   DRAG & DROP
-  // ---------------------------
-  const handleDragEnd = (result) => {
-    const sourceColumn = result.source.droppableId;
-
-    // 🔥 CANASTA: si suelta en el área "delete", eliminar tarea
-    if (result.destination?.droppableId === "delete") {
-      setTasks((prev) => ({
-        ...prev,
-        [sourceColumn]: prev[sourceColumn].filter(
-          (t, index) => index !== result.source.index
-        ),
-      }));
-      return;
-    }
-
-    // 🔥 Si no hay destino (soltó fuera) → NO elimina ahora (solo canasta)
-    if (!result.destination) return;
-
-    const destColumn = result.destination.droppableId;
-
-    const sourceTasks = Array.from(tasks[sourceColumn]);
-    const destTasks = Array.from(tasks[destColumn]);
-
-    const [movedTask] = sourceTasks.splice(result.source.index, 1);
-    destTasks.splice(result.destination.index, 0, movedTask);
-
-    setTasks({
-      ...tasks,
-      [sourceColumn]: sourceTasks,
-      [destColumn]: destTasks,
-    });
-  };
-
-  // ---------------------------
-  //   AGREGAR TAREA
-  // ---------------------------
+  // -------------------------
+  // ADD TASK
+  // -------------------------
   const addTask = () => {
-    if (!newTask.trim()) return;
-
-    const newId = Date.now().toString();
-    const newItem = { id: newId, text: newTask };
-
-    setTasks({
-      ...tasks,
-      todo: [...tasks.todo, newItem],
-    });
-
+    if (newTask.trim() === "") return;
+    const task = {
+      id: Date.now(),
+      text: newTask,
+      column: "todo"
+    };
+    setTasks([...tasks, task]);
     setNewTask("");
   };
 
-  // ---------------------------
-  //   UI
-  // ---------------------------
-  return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <h1 className="text-3xl font-bold text-center mb-6">Gestor de Tareas</h1>
+  // -------------------------
+  // DELETE TASK
+  // -------------------------
+  const deleteTask = (id) => {
+    setTasks(tasks.filter((t) => t.id !== id));
+  };
 
-      {/* Input para nueva tarea */}
-      <div className="flex justify-center mb-6 gap-2">
+  // -------------------------
+  // EDIT TASK
+  // -------------------------
+  const editTask = (id) => {
+    const newText = prompt("Editar tarea:");
+    if (!newText) return;
+
+    setTasks(
+      tasks.map((t) => (t.id === id ? { ...t, text: newText } : t))
+    );
+  };
+
+  // -------------------------
+  // DRAG START
+  // -------------------------
+  const handleDragStart = (task) => {
+    setDraggingTask(task);
+  };
+
+  // -------------------------
+  // DROP IN COLUMN
+  // -------------------------
+  const handleDrop = (column) => {
+    if (!draggingTask) return;
+
+    setTasks(
+      tasks.map((t) =>
+        t.id === draggingTask.id ? { ...t, column } : t
+      )
+    );
+    setDraggingTask(null);
+  };
+
+  return (
+    <div style={{ padding: 20, fontFamily: "Arial" }}>
+
+      {/* INPUT */}
+      <h2>Gestor de Tareas (3 columnas)</h2>
+      <div style={{ display: "flex", gap: 10 }}>
         <input
-          type="text"
-          className="border border-gray-400 rounded p-2 w-64"
-          placeholder="Nueva tarea..."
+          style={{ flex: 1, padding: 10 }}
+          placeholder="Nueva tarea"
           value={newTask}
           onChange={(e) => setNewTask(e.target.value)}
         />
-        <button
-          onClick={addTask}
-          className="bg-blue-600 text-white px-4 py-2 rounded"
-        >
-          Agregar
-        </button>
+        <button onClick={addTask}>Agregar</button>
       </div>
 
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* COLUMNS */}
+      <div
+        style={{
+          display: "flex",
+          marginTop: 20,
+          gap: 20,
+        }}
+      >
+        {columns.map((col) => (
+          <div
+            key={col}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => handleDrop(col)}
+            style={{
+              flex: 1,
+              padding: 15,
+              background: "#f0f0f0",
+              borderRadius: 10,
+              minHeight: 400,
+            }}
+          >
+            <h3 style={{ textTransform: "capitalize" }}>{col}</h3>
 
-          {/* Columna To Do */}
-          <Droppable droppableId="todo">
-            {(provided) => (
-              <div
-                className="bg-white p-4 rounded shadow min-h-[300px]"
-                ref={provided.innerRef}
-                {...provided.droppableProps}
-              >
-                <h2 className="text-xl font-semibold mb-3 text-blue-700">To Do</h2>
+            {tasks
+              .filter((t) => t.column === col)
+              .map((task) => (
+                <div
+                  key={task.id}
+                  draggable
+                  onDragStart={() => handleDragStart(task)}
+                  style={{
+                    padding: 10,
+                    background: "white",
+                    borderRadius: 8,
+                    marginBottom: 10,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
+                  }}
+                >
+                  <span>{task.text}</span>
 
-                {tasks.todo.map((task, index) => (
-                  <Draggable key={task.id} draggableId={task.id} index={index}>
-                    {(provided) => (
-                      <div
-                        className="p-3 bg-blue-100 rounded mb-2 shadow cursor-grab active:cursor-grabbing"
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                      >
-                        {task.text}
-                      </div>
-                    )}
-                  </Draggable>
-                ))}
+                  <div style={{ display: "flex", gap: 10 }}>
+                    {/* Edit Button */}
+                    <button
+                      onClick={() => editTask(task.id)}
+                      style={{
+                        background: "#3498db",
+                        color: "white",
+                        border: "none",
+                        borderRadius: 5,
+                        padding: "5px 10px",
+                      }}
+                    >
+                      ✏️
+                    </button>
 
-                {provided.placeholder}
-              </div>
-            )}
-          </Droppable>
-
-          {/* Columna Proceso */}
-          <Droppable droppableId="proceso">
-            {(provided) => (
-              <div
-                className="bg-white p-4 rounded shadow min-h-[300px]"
-                ref={provided.innerRef}
-                {...provided.droppableProps}
-              >
-                <h2 className="text-xl font-semibold mb-3 text-yellow-600">
-                  En Proceso
-                </h2>
-
-                {tasks.proceso.map((task, index) => (
-                  <Draggable key={task.id} draggableId={task.id} index={index}>
-                    {(provided) => (
-                      <div
-                        className="p-3 bg-yellow-100 rounded mb-2 shadow cursor-grab active:cursor-grabbing"
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                      >
-                        {task.text}
-                      </div>
-                    )}
-                  </Draggable>
-                ))}
-
-                {provided.placeholder}
-              </div>
-            )}
-          </Droppable>
-
-          {/* Columna Delegadas */}
-          <Droppable droppableId="delegadas">
-            {(provided) => (
-              <div
-                className="bg-white p-4 rounded shadow min-h-[300px]"
-                ref={provided.innerRef}
-                {...provided.droppableProps}
-              >
-                <h2 className="text-xl font-semibold mb-3 text-green-700">
-                  Delegadas
-                </h2>
-
-                {tasks.delegadas.map((task, index) => (
-                  <Draggable key={task.id} draggableId={task.id} index={index}>
-                    {(provided) => (
-                      <div
-                        className="p-3 bg-green-100 rounded mb-2 shadow cursor-grab active:cursor-grabbing"
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                      >
-                        {task.text}
-                      </div>
-                    )}
-                  </Draggable>
-                ))}
-
-                {provided.placeholder}
-              </div>
-            )}
-          </Droppable>
-
-        </div>
-
-        {/* 🗑️ CANASTA PARA BORRAR */}
-        <Droppable droppableId="delete">
-          {(provided) => (
-            <div
-              className="mt-10 mx-auto w-40 h-40 rounded-full bg-red-200 border-4 border-red-500 flex items-center justify-center text-2xl font-bold shadow"
-              ref={provided.innerRef}
-              {...provided.droppableProps}
-            >
-              🗑️
-              {provided.placeholder}
-            </div>
-          )}
-        </Droppable>
-
-      </DragDropContext>
+                    {/* Delete Button */}
+                    <button
+                      onClick={() => deleteTask(task.id)}
+                      style={{
+                        background: "#e74c3c",
+                        color: "white",
+                        border: "none",
+                        borderRadius: 5,
+                        padding: "5px 10px",
+                      }}
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

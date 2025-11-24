@@ -21,11 +21,11 @@ export default function App() {
   const [tasks, setTasks] = useState(
     loadTasks() || {
       todo: [
-        { id: "1", text: "Tarea 1" },
-        { id: "2", text: "Tarea 2" },
+        { id: "1", text: "Tarea 1", completed: false },
+        { id: "2", text: "Tarea 2", completed: false },
       ],
-      proceso: [{ id: "3", text: "Tarea 3 en proceso" }],
-      delegadas: [{ id: "4", text: "Tarea delegada" }],
+      proceso: [{ id: "3", text: "Tarea 3 en proceso", completed: false }],
+      delegadas: [{ id: "4", text: "Tarea delegada", completed: false }],
     }
   );
 
@@ -52,12 +52,26 @@ export default function App() {
   };
 
   // ---------------------------
+  //   MARCAR / DESMARCAR COMPLETADA
+  // ---------------------------
+  const toggleComplete = (id) => {
+    setTasks((prev) => {
+      const newState = { ...prev };
+      for (const col in newState) {
+        newState[col] = newState[col].map((t) =>
+          t.id === id ? { ...t, completed: !t.completed } : t
+        );
+      }
+      return newState;
+    });
+  };
+
+  // ---------------------------
   //   DRAG & DROP
   // ---------------------------
   const handleDragEnd = (result) => {
     const sourceColumn = result.source.droppableId;
 
-    // 🔥 Si no hay destino → la soltó fuera → eliminar tarea
     if (!result.destination) {
       setTasks((prev) => ({
         ...prev,
@@ -90,7 +104,7 @@ export default function App() {
     if (!newTask.trim()) return;
 
     const newId = Date.now().toString();
-    const newItem = { id: newId, text: newTask };
+    const newItem = { id: newId, text: newTask, completed: false };
 
     setTasks({
       ...tasks,
@@ -146,15 +160,27 @@ export default function App() {
                         {...provided.draggableProps}
                         {...provided.dragHandleProps}
                       >
-                        <span>{task.text}</span>
+                        {/* Checkbox */}
+                        <input
+                          type="checkbox"
+                          checked={task.completed}
+                          onChange={() => toggleComplete(task.id)}
+                          className="mr-2"
+                          onClick={(e) => e.stopPropagation()}
+                        />
 
-                        {/* BOTÓN DE BORRAR */}
+                        {/* Texto con tachado si completed */}
+                        <span className={task.completed ? "line-through text-gray-600" : ""}>
+                          {task.text}
+                        </span>
+
+                        {/* Botón borrar */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             deleteTask(task.id);
                           }}
-                          className="text-red-600 text-xl"
+                          className="text-red-600 text-xl ml-2"
                         >
                           🗑️
                         </button>
@@ -176,9 +202,7 @@ export default function App() {
                 ref={provided.innerRef}
                 {...provided.droppableProps}
               >
-                <h2 className="text-xl font-semibold mb-3 text-yellow-600">
-                  En Proceso
-                </h2>
+                <h2 className="text-xl font-semibold mb-3 text-yellow-600">En Proceso</h2>
 
                 {tasks.proceso.map((task, index) => (
                   <Draggable key={task.id} draggableId={task.id} index={index}>
@@ -189,15 +213,24 @@ export default function App() {
                         {...provided.draggableProps}
                         {...provided.dragHandleProps}
                       >
-                        <span>{task.text}</span>
+                        <input
+                          type="checkbox"
+                          checked={task.completed}
+                          onChange={() => toggleComplete(task.id)}
+                          className="mr-2"
+                          onClick={(e) => e.stopPropagation()}
+                        />
 
-                        {/* BOTÓN DE BORRAR */}
+                        <span className={task.completed ? "line-through text-gray-600" : ""}>
+                          {task.text}
+                        </span>
+
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             deleteTask(task.id);
                           }}
-                          className="text-red-600 text-xl"
+                          className="text-red-600 text-xl ml-2"
                         >
                           🗑️
                         </button>
@@ -219,9 +252,7 @@ export default function App() {
                 ref={provided.innerRef}
                 {...provided.droppableProps}
               >
-                <h2 className="text-xl font-semibold mb-3 text-green-700">
-                  Delegadas
-                </h2>
+                <h2 className="text-xl font-semibold mb-3 text-green-700">Delegadas</h2>
 
                 {tasks.delegadas.map((task, index) => (
                   <Draggable key={task.id} draggableId={task.id} index={index}>
@@ -232,15 +263,24 @@ export default function App() {
                         {...provided.draggableProps}
                         {...provided.dragHandleProps}
                       >
-                        <span>{task.text}</span>
+                        <input
+                          type="checkbox"
+                          checked={task.completed}
+                          onChange={() => toggleComplete(task.id)}
+                          className="mr-2"
+                          onClick={(e) => e.stopPropagation()}
+                        />
 
-                        {/* BOTÓN DE BORRAR */}
+                        <span className={task.completed ? "line-through text-gray-600" : ""}>
+                          {task.text}
+                        </span>
+
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             deleteTask(task.id);
                           }}
-                          className="text-red-600 text-xl"
+                          className="text-red-600 text-xl ml-2"
                         >
                           🗑️
                         </button>

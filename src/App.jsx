@@ -67,7 +67,7 @@ export default function App() {
   };
 
   // ---------------------------
-  //   DRAG & DROP
+  //   DRAG & DROP (CORREGIDO)
   // ---------------------------
   const handleDragEnd = (result) => {
     const sourceColumn = result.source.droppableId;
@@ -84,6 +84,22 @@ export default function App() {
 
     const destColumn = result.destination.droppableId;
 
+    // 🟦 REORDENAR SIN DUPLICAR SI ES LA MISMA COLUMNA
+    if (sourceColumn === destColumn) {
+      const columnTasks = Array.from(tasks[sourceColumn]);
+
+      const [movedTask] = columnTasks.splice(result.source.index, 1);
+      columnTasks.splice(result.destination.index, 0, movedTask);
+
+      setTasks({
+        ...tasks,
+        [sourceColumn]: columnTasks,
+      });
+
+      return;
+    }
+
+    // 🟩 SI ES ENTRE COLUMNAS → MOVER NORMAL
     const sourceTasks = Array.from(tasks[sourceColumn]);
     const destTasks = Array.from(tasks[destColumn]);
 
@@ -160,7 +176,6 @@ export default function App() {
                         {...provided.draggableProps}
                         {...provided.dragHandleProps}
                       >
-                        {/* Checkbox */}
                         <input
                           type="checkbox"
                           checked={task.completed}
@@ -169,12 +184,10 @@ export default function App() {
                           onClick={(e) => e.stopPropagation()}
                         />
 
-                        {/* Texto con tachado si completed */}
                         <span className={task.completed ? "line-through text-gray-600" : ""}>
                           {task.text}
                         </span>
 
-                        {/* Botón borrar */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -202,7 +215,9 @@ export default function App() {
                 ref={provided.innerRef}
                 {...provided.droppableProps}
               >
-                <h2 className="text-xl font-semibold mb-3 text-yellow-600">En Proceso</h2>
+                <h2 className="text-xl font-semibold mb-3 text-yellow-600">
+                  En Proceso
+                </h2>
 
                 {tasks.proceso.map((task, index) => (
                   <Draggable key={task.id} draggableId={task.id} index={index}>
@@ -252,7 +267,9 @@ export default function App() {
                 ref={provided.innerRef}
                 {...provided.droppableProps}
               >
-                <h2 className="text-xl font-semibold mb-3 text-green-700">Delegadas</h2>
+                <h2 className="text-xl font-semibold mb-3 text-green-700">
+                  Delegadas
+                </h2>
 
                 {tasks.delegadas.map((task, index) => (
                   <Draggable key={task.id} draggableId={task.id} index={index}>

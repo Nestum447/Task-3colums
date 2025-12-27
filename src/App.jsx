@@ -10,9 +10,13 @@ import {
   onSnapshot,
   updateDoc,
   doc,
+  query,
+  orderBy,
 } from "firebase/firestore";
 
-// 👉 CONFIGURA CON TUS DATOS
+/* ======================
+   FIREBASE CONFIG
+====================== */
 const firebaseConfig = {
   apiKey: "TU_API_KEY",
   authDomain: "TU_AUTH_DOMAIN",
@@ -22,35 +26,40 @@ const firebaseConfig = {
   appId: "TU_APP_ID",
 };
 
-// Inicializar Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Columnas Trello
+/* ======================
+   COLUMNAS
+====================== */
 const columns = {
   todo: {
     title: "Todo",
     bg: "bg-blue-100/60",
-    card: "bg-blue-50/80",
+    card: "bg-blue-50/90",
   },
   proceso: {
     title: "Proceso",
     bg: "bg-yellow-100/60",
-    card: "bg-yellow-50/80",
+    card: "bg-yellow-50/90",
   },
   delegadas: {
     title: "Delegadas",
     bg: "bg-green-100/60",
-    card: "bg-green-50/80",
+    card: "bg-green-50/90",
   },
 };
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
+  const [newTask, setNewTask] = useState("");
 
-  // 🔄 Escuchar Firebase
+  /* ======================
+     CARGAR TAREAS
+  ====================== */
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "tareas"), (snap) => {
+    const q = query(collection(db, "tareas"), orderBy("order"));
+    const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map((d) => ({
         id: d.id,
         ...d.data(),
@@ -60,42 +69,84 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // ➕ Nueva tarea
+  /* ======================
+     AGREGAR TAREA
+  ====================== */
   const addTask = async () => {
-    const title = prompt("Nueva tarea");
-    if (!title) return;
+    if (!newTask.trim()) return;
+
+    const todoTasks = tasks.filter((t) => t.status === "todo");
 
     await addDoc(collection(db, "tareas"), {
-      title,
+      title: newTask,
       status: "todo",
+      order: todoTasks.length,
       created: Date.now(),
     });
+
+    setNewTask("");
   };
 
-  // 🔁 Drag terminado
+  /* ======================
+     DRAG & DROP
+  ====================== */
   const onDragEnd = async (result) => {
     if (!result.destination) return;
 
-    const { draggableId, destination } = result;
+    const { source, destination, draggableId } = result;
 
-    const taskRef = doc(db, "tareas", draggableId);
-    await updateDoc(taskRef, {
-      status: destination.droppableId,
+    // Tareas origen y destino
+    const sourceTasks = tasks.filter(
+      (t) => t.status === source.droppableId
+    );
+    const destTasks = tasks.filter(
+      (t) => t.status === destination.droppableId
+    );
+
+    // Mover tarea
+    const [moved] = sourceTasks.splice(source.index, 1);
+    moved.status = destination.droppableId;
+
+    destTasks.splice(destination.index, 0, moved);
+
+    // Actualizar orden en ambas columnas
+    const updates = [];
+
+    sourceTasks.forEach((t, i) => {
+      updates.push(updateDoc(doc(db, "tareas", t.id), { order: i }));
     });
+
+    destTasks.forEach((t, i) => {
+      updates.push(
+        updateDoc(doc(db, "tareas", t.id), {
+          status: destination.droppableId,
+          order: i,
+        })
+      );
+    });
+
+    await Promise.all(updates);
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 overscroll-none touch-none">
+    <div className="min-h-screen bg-slate-100 p-4">
       <h1 className="text-2xl font-bold text-center mb-4">
-        Tablero de Tareas
+        Gestor de Tareas
       </h1>
 
-      <div className="text-center mb-4">
+      {/* AGREGAR */}
+      <div className="flex justify-center gap-2 mb-6">
+        <input
+          value={newTask}
+          onChange={(e) => setNewTask(e.target.value)}
+          placeholder="Nueva tarea..."
+          className="border rounded px-3 py-2 w-64"
+        />
         <button
           onClick={addTask}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700"
+          className="bg-indigo-600 text-white px-4 py-2 rounded"
         >
-          + Nueva tarea
+          Agregar
         </button>
       </div>
 
@@ -107,9 +158,9 @@ export default function App() {
                 <div
                   ref={provided.innerRef}
                   {...provided.droppableProps}
-                  className={`${col.bg} rounded-xl p-3 min-h-[400px]`}
+                  className={`${col.bg} rounded-xl p-3 min-h-[350px]`}
                 >
-                  <h2 className="font-semibold mb-3 text-center">
+                  <h2 className="font-semibold text-center mb-3">
                     {col.title}
                   </h2>
 
@@ -126,23 +177,18 @@ export default function App() {
                             ref={provided.innerRef}
                             {...provided.draggableProps}
                             {...provided.dragHandleProps}
-                            style={{
-                              ...provided.draggableProps.style,
-                            }}
+                            style={provided.draggableProps.style}
                             className={`
                               ${col.card}
-                              p-3 mb-2 rounded-lg
-                              flex justify-between items-center
-                              transition
-                              touch-none select-none
+                              p-3 mb-2 rounded-lg shadow
                               ${
                                 snapshot.isDragging
-                                  ? "shadow-xl scale-[1.02] opacity-90"
-                                  : "shadow-sm"
+                                  ? "opacity-90 scale-[1.02]"
+                                  : ""
                               }
                             `}
                           >
-                            <span>{task.title}</span>
+                            {task.title}
                           </div>
                         )}
                       </Draggable>

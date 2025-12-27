@@ -4,7 +4,7 @@ import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 /* =========================
    🔥 FIREBASE (SIN ANALYTICS)
    ========================= */
-import { initializeApp } from "firebase/app";
+import { db } from "./firebase" ;
 import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 
 const firebaseConfig = {

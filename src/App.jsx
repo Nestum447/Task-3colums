@@ -1,27 +1,11 @@
 import { useState, useEffect } from "react";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
-/* =========================
-   🔥 FIREBASE (SIN ANALYTICS)
-   ========================= */
-import { db } from "./firebase" ;
-
-const firebaseConfig = {
-  apiKey: "AIzaSyD5iLXD-lyu6PZ0x0LrmK9khxWqrPPlPcA",
-  authDomain: "gestor-tareas-36fc5.firebaseapp.com",
-  projectId: "gestor-tareas-36fc5",
-  storageBucket: "gestor-tareas-36fc5.firebasestorage.app",
-  messagingSenderId: "326368524776",
-  appId: "1:326368524776:web:531cea029c0afde8b28c5d",
-};
-
-// Inicializar Firebase
+import { db } from "./firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
 export default function App() {
 
-  // ---------------------------
-  //   ESTADO PRINCIPAL
-  // ---------------------------
   const [tasks, setTasks] = useState({
     todo: [],
     proceso: [],
@@ -31,9 +15,9 @@ export default function App() {
   const [newTask, setNewTask] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // ---------------------------
-  //   FIREBASE: CARGAR
-  // ---------------------------
+  /* =========================
+     🔥 CARGAR DESDE FIREBASE
+     ========================= */
   useEffect(() => {
     const loadTasks = async () => {
       try {
@@ -43,25 +27,24 @@ export default function App() {
         if (snap.exists()) {
           setTasks(snap.data().tasks);
         } else {
-          const initialData = {
-            tasks: {
-              todo: [
-                { id: "1", text: "Tarea 1", completed: false },
-                { id: "2", text: "Tarea 2", completed: false },
-              ],
-              proceso: [
-                { id: "3", text: "Tarea 3 en proceso", completed: false },
-              ],
-              delegadas: [
-                { id: "4", text: "Tarea delegada", completed: false },
-              ],
-            },
+          const initialTasks = {
+            todo: [
+              { id: "1", text: "Tarea 1", completed: false },
+              { id: "2", text: "Tarea 2", completed: false },
+            ],
+            proceso: [
+              { id: "3", text: "Tarea en proceso", completed: false },
+            ],
+            delegadas: [
+              { id: "4", text: "Tarea delegada", completed: false },
+            ],
           };
-          await setDoc(ref, initialData);
-          setTasks(initialData.tasks);
+
+          await setDoc(ref, { tasks: initialTasks });
+          setTasks(initialTasks);
         }
-      } catch (error) {
-        console.error("Error cargando Firebase", error);
+      } catch (err) {
+        console.error("🔥 Error cargando Firebase:", err);
       } finally {
         setLoading(false);
       }
@@ -70,108 +53,98 @@ export default function App() {
     loadTasks();
   }, []);
 
-  // ---------------------------
-  //   FIREBASE: GUARDAR
-  // ---------------------------
+  /* =========================
+     💾 GUARDAR EN FIREBASE
+     ========================= */
   useEffect(() => {
     if (loading) return;
-    setDoc(doc(db, "boards", "main"), { tasks });
+
+    const save = async () => {
+      try {
+        await setDoc(doc(db, "boards", "main"), { tasks });
+      } catch (err) {
+        console.error("🔥 Error guardando Firebase:", err);
+      }
+    };
+
+    save();
   }, [tasks, loading]);
 
-  // ---------------------------
-  //   BORRAR TAREA
-  // ---------------------------
+  /* =========================
+     🗑️ BORRAR
+     ========================= */
   const deleteTask = (id) => {
     setTasks((prev) => {
-      const newState = { ...prev };
-      for (const col in newState) {
-        newState[col] = newState[col].filter((t) => t.id !== id);
+      const copy = { ...prev };
+      for (const col in copy) {
+        copy[col] = copy[col].filter((t) => t.id !== id);
       }
-      return newState;
+      return copy;
     });
   };
 
-  // ---------------------------
-  //   MARCAR / DESMARCAR
-  // ---------------------------
+  /* =========================
+     ✅ COMPLETAR
+     ========================= */
   const toggleComplete = (id) => {
     setTasks((prev) => {
-      const newState = { ...prev };
-      for (const col in newState) {
-        newState[col] = newState[col].map((t) =>
+      const copy = { ...prev };
+      for (const col in copy) {
+        copy[col] = copy[col].map((t) =>
           t.id === id ? { ...t, completed: !t.completed } : t
         );
       }
-      return newState;
+      return copy;
     });
   };
 
-  // ---------------------------
-  //   DRAG & DROP (ORIGINAL)
-  // ---------------------------
+  /* =========================
+     🧲 DRAG & DROP
+     ========================= */
   const handleDragEnd = (result) => {
-    const sourceColumn = result.source.droppableId;
+    if (!result.destination) return;
 
-    if (!result.destination) {
-      setTasks((prev) => ({
-        ...prev,
-        [sourceColumn]: prev[sourceColumn].filter(
-          (t, index) => index !== result.source.index
-        ),
-      }));
+    const src = result.source.droppableId;
+    const dst = result.destination.droppableId;
+
+    if (src === dst) {
+      const items = Array.from(tasks[src]);
+      const [moved] = items.splice(result.source.index, 1);
+      items.splice(result.destination.index, 0, moved);
+      setTasks({ ...tasks, [src]: items });
       return;
     }
 
-    const destColumn = result.destination.droppableId;
+    const srcItems = Array.from(tasks[src]);
+    const dstItems = Array.from(tasks[dst]);
 
-    if (sourceColumn === destColumn) {
-      const columnTasks = Array.from(tasks[sourceColumn]);
-      const [movedTask] = columnTasks.splice(result.source.index, 1);
-      columnTasks.splice(result.destination.index, 0, movedTask);
-
-      setTasks({
-        ...tasks,
-        [sourceColumn]: columnTasks,
-      });
-      return;
-    }
-
-    const sourceTasks = Array.from(tasks[sourceColumn]);
-    const destTasks = Array.from(tasks[destColumn]);
-
-    const [movedTask] = sourceTasks.splice(result.source.index, 1);
-    destTasks.splice(result.destination.index, 0, movedTask);
+    const [moved] = srcItems.splice(result.source.index, 1);
+    dstItems.splice(result.destination.index, 0, moved);
 
     setTasks({
       ...tasks,
-      [sourceColumn]: sourceTasks,
-      [destColumn]: destTasks,
+      [src]: srcItems,
+      [dst]: dstItems,
     });
   };
 
-  // ---------------------------
-  //   AGREGAR TAREA
-  // ---------------------------
+  /* =========================
+     ➕ AGREGAR
+     ========================= */
   const addTask = () => {
     if (!newTask.trim()) return;
 
-    const newItem = {
-      id: Date.now().toString(),
-      text: newTask,
-      completed: false,
-    };
-
     setTasks({
       ...tasks,
-      todo: [...tasks.todo, newItem],
+      todo: [
+        ...tasks.todo,
+        { id: Date.now().toString(), text: newTask, completed: false },
+      ],
     });
 
     setNewTask("");
   };
 
-  // ---------------------------
-  //   LOADING
-  // ---------------------------
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-xl">
@@ -180,88 +153,52 @@ export default function App() {
     );
   }
 
-  // ---------------------------
-  //   UI (SIN CAMBIOS)
-  // ---------------------------
   return (
     <div className="min-h-screen bg-gray-100 p-6">
-      <h1 className="text-3xl font-bold text-center mb-6">Gestor de Tareas</h1>
+      <h1 className="text-3xl font-bold text-center mb-6">
+        Gestor de Tareas
+      </h1>
 
       <div className="flex justify-center mb-6 gap-2">
         <input
-          type="text"
-          className="border border-gray-400 rounded p-2 w-64"
-          placeholder="Nueva tarea..."
+          className="border p-2 w-64"
           value={newTask}
           onChange={(e) => setNewTask(e.target.value)}
+          placeholder="Nueva tarea..."
         />
-        <button
-          onClick={addTask}
-          className="bg-blue-600 text-white px-4 py-2 rounded"
-        >
+        <button onClick={addTask} className="bg-blue-600 text-white px-4">
           Agregar
         </button>
       </div>
 
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-          {["todo", "proceso", "delegadas"].map((col, idx) => (
-            <Droppable droppableId={col} key={idx}>
-              {(provided) => (
-                <div
+          {["todo", "proceso", "delegadas"].map((col) => (
+            <Droppable droppableId={col} key={col}>
+              {(p) => (
+                <div ref={p.innerRef} {...p.droppableProps}
                   className="bg-white p-4 rounded shadow min-h-[300px]"
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
                 >
-                  <h2 className="text-xl font-semibold mb-3 capitalize">
-                    {col}
-                  </h2>
+                  <h2 className="font-bold capitalize mb-3">{col}</h2>
 
-                  {tasks[col].map((task, index) => (
-                    <Draggable
-                      key={task.id}
-                      draggableId={task.id}
-                      index={index}
-                    >
-                      {(provided) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          {...provided.dragHandleProps}
-                          className="flex items-center justify-between p-3 bg-gray-100 rounded mb-2 shadow"
+                  {tasks[col].map((task, i) => (
+                    <Draggable key={task.id} draggableId={task.id} index={i}>
+                      {(p) => (
+                        <div ref={p.innerRef} {...p.draggableProps}
+                          {...p.dragHandleProps}
+                          className="p-3 bg-gray-100 rounded mb-2 flex justify-between"
                         >
-                          <input
-                            type="checkbox"
-                            checked={task.completed}
-                            onChange={() => toggleComplete(task.id)}
-                          />
-                          <span
-                            className={
-                              task.completed
-                                ? "line-through text-gray-600"
-                                : ""
-                            }
-                          >
-                            {task.text}
-                          </span>
-                          <button
-                            onClick={() => deleteTask(task.id)}
-                            className="text-red-600 text-xl"
-                          >
-                            🗑️
-                          </button>
+                          <span>{task.text}</span>
+                          <button onClick={() => deleteTask(task.id)}>🗑️</button>
                         </div>
                       )}
                     </Draggable>
                   ))}
-
-                  {provided.placeholder}
+                  {p.placeholder}
                 </div>
               )}
             </Droppable>
           ))}
-
         </div>
       </DragDropContext>
     </div>

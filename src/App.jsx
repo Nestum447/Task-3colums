@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
-// 🔥 Firebase
+// Firebase
 import { initializeApp } from "firebase/app";
 import {
   getFirestore,
@@ -33,21 +33,9 @@ const db = getFirestore(app);
    COLUMNAS
 ====================== */
 const columns = {
-  todo: {
-    title: "Todo",
-    bg: "bg-blue-100/60",
-    card: "bg-blue-50/90",
-  },
-  proceso: {
-    title: "Proceso",
-    bg: "bg-yellow-100/60",
-    card: "bg-yellow-50/90",
-  },
-  delegadas: {
-    title: "Delegadas",
-    bg: "bg-green-100/60",
-    card: "bg-green-50/90",
-  },
+  todo: { title: "Todo", bg: "bg-blue-100/60", card: "bg-blue-50/90" },
+  proceso: { title: "Proceso", bg: "bg-yellow-100/60", card: "bg-yellow-50/90" },
+  delegadas: { title: "Delegadas", bg: "bg-green-100/60", card: "bg-green-50/90" },
 };
 
 export default function App() {
@@ -55,10 +43,15 @@ export default function App() {
   const [newTask, setNewTask] = useState("");
 
   /* ======================
-     CARGAR TAREAS
+     CARGAR DESDE FIREBASE
   ====================== */
   useEffect(() => {
-    const q = query(collection(db, "tareas"), orderBy("order"));
+    const q = query(
+      collection(db, "tareas"),
+      orderBy("status"),
+      orderBy("order")
+    );
+
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map((d) => ({
         id: d.id,
@@ -66,6 +59,7 @@ export default function App() {
       }));
       setTasks(data);
     });
+
     return () => unsub();
   }, []);
 
@@ -75,46 +69,53 @@ export default function App() {
   const addTask = async () => {
     if (!newTask.trim()) return;
 
-    const todoTasks = tasks.filter((t) => t.status === "todo");
+    const todoCount = tasks.filter((t) => t.status === "todo").length;
 
     await addDoc(collection(db, "tareas"), {
-      title: newTask,
+      title: newTask.trim(),
       status: "todo",
-      order: todoTasks.length,
+      order: todoCount,
       created: Date.now(),
     });
 
+    // ✅ LIMPIA INPUT
     setNewTask("");
   };
 
   /* ======================
      DRAG & DROP
   ====================== */
-  const onDragEnd = async (result) => {
-    if (!result.destination) return;
+  const onDragEnd = async ({ source, destination, draggableId }) => {
+    if (!destination) return;
 
-    const { source, destination, draggableId } = result;
+    if (
+      source.droppableId === destination.droppableId &&
+      source.index === destination.index
+    ) {
+      return;
+    }
 
-    // Tareas origen y destino
-    const sourceTasks = tasks.filter(
+    const columnTasks = tasks.filter(
       (t) => t.status === source.droppableId
     );
-    const destTasks = tasks.filter(
-      (t) => t.status === destination.droppableId
-    );
 
-    // Mover tarea
-    const [moved] = sourceTasks.splice(source.index, 1);
-    moved.status = destination.droppableId;
+    const movedTask = columnTasks[source.index];
 
-    destTasks.splice(destination.index, 0, moved);
+    // Quitar de origen
+    columnTasks.splice(source.index, 1);
 
-    // Actualizar orden en ambas columnas
-    const updates = [];
+    // Insertar en destino
+    const destTasks =
+      source.droppableId === destination.droppableId
+        ? columnTasks
+        : tasks.filter((t) => t.status === destination.droppableId);
 
-    sourceTasks.forEach((t, i) => {
-      updates.push(updateDoc(doc(db, "tareas", t.id), { order: i }));
+    destTasks.splice(destination.index, 0, {
+      ...movedTask,
+      status: destination.droppableId,
     });
+
+    const updates = [];
 
     destTasks.forEach((t, i) => {
       updates.push(
@@ -124,6 +125,12 @@ export default function App() {
         })
       );
     });
+
+    if (source.droppableId !== destination.droppableId) {
+      columnTasks.forEach((t, i) => {
+        updates.push(updateDoc(doc(db, "tareas", t.id), { order: i }));
+      });
+    }
 
     await Promise.all(updates);
   };
@@ -140,7 +147,7 @@ export default function App() {
           value={newTask}
           onChange={(e) => setNewTask(e.target.value)}
           placeholder="Nueva tarea..."
-          className="border rounded px-3 py-2 w-64"
+          className="border rounded px-3 py-2 w-64 bg-white"
         />
         <button
           onClick={addTask}
@@ -178,15 +185,9 @@ export default function App() {
                             {...provided.draggableProps}
                             {...provided.dragHandleProps}
                             style={provided.draggableProps.style}
-                            className={`
-                              ${col.card}
-                              p-3 mb-2 rounded-lg shadow
-                              ${
-                                snapshot.isDragging
-                                  ? "opacity-90 scale-[1.02]"
-                                  : ""
-                              }
-                            `}
+                            className={`${col.card} p-3 mb-2 rounded-lg shadow ${
+                              snapshot.isDragging ? "opacity-90 scale-[1.02]" : ""
+                            }`}
                           >
                             {task.title}
                           </div>

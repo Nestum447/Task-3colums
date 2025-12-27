@@ -11,8 +11,9 @@
  * Pega este archivo como App.jsx en un proyecto creado con Vite / Create React App
  * y arranca la app. Funciona en móvil, permite arrastrar con el dedo entre columnas.
  */
+modificado nestor
 
-import React, { useState } from 'react';
+/* import React, { useState } from 'react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 const initialColumns = {

@@ -14,10 +14,10 @@
 modificado nestor
 
 /** 
-* import React, { useState } from 'react';
-* import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+//* import React, { useState } from 'react';
+// * import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
-*const initialColumns = {
+// const initialColumns = {
 /*
 
   todo: {

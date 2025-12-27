@@ -5,7 +5,6 @@ import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
    🔥 FIREBASE (SIN ANALYTICS)
    ========================= */
 import { db } from "./firebase" ;
-import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD5iLXD-lyu6PZ0x0LrmK9khxWqrPPlPcA",
@@ -17,8 +16,6 @@ const firebaseConfig = {
 };
 
 // Inicializar Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
 
 export default function App() {
 

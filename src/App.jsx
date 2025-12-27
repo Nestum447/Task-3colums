@@ -1,260 +1,152 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
-import { db } from "./firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+// 🔥 Firebase
+import { initializeApp } from "firebase/app";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  onSnapshot,
+  updateDoc,
+  doc,
+} from "firebase/firestore";
+
+// 👉 CONFIGURA CON TUS DATOS
+const firebaseConfig = {
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_AUTH_DOMAIN",
+  projectId: "TU_PROJECT_ID",
+  storageBucket: "TU_STORAGE",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID",
+};
+
+// Inicializar Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// Columnas Trello
+const columns = {
+  todo: {
+    title: "Todo",
+    bg: "bg-blue-100/60",
+    card: "bg-blue-50/80",
+  },
+  proceso: {
+    title: "Proceso",
+    bg: "bg-yellow-100/60",
+    card: "bg-yellow-50/80",
+  },
+  delegadas: {
+    title: "Delegadas",
+    bg: "bg-green-100/60",
+    card: "bg-green-50/80",
+  },
+};
 
 export default function App() {
-  /* =========================
-     ESTADOS
-     ========================= */
-  const [tasks, setTasks] = useState({
-    todo: [],
-    proceso: [],
-    delegadas: [],
-  });
+  const [tasks, setTasks] = useState([]);
 
-  const [newTask, setNewTask] = useState("");
-  const [loading, setLoading] = useState(true);
-
-  /* =========================
-     🔥 CARGAR DESDE FIREBASE
-     ========================= */
+  // 🔄 Escuchar Firebase
   useEffect(() => {
-    const loadTasks = async () => {
-      try {
-        const ref = doc(db, "boards", "main");
-        const snap = await getDoc(ref);
-
-        if (snap.exists()) {
-          setTasks(snap.data().tasks);
-        } else {
-          const initialTasks = {
-            todo: [
-              { id: "1", text: "Tarea 1", completed: false },
-              { id: "2", text: "Tarea 2", completed: false },
-            ],
-            proceso: [
-              { id: "3", text: "Tarea en proceso", completed: false },
-            ],
-            delegadas: [
-              { id: "4", text: "Tarea delegada", completed: false },
-            ],
-          };
-
-          await setDoc(ref, { tasks: initialTasks });
-          setTasks(initialTasks);
-        }
-      } catch (error) {
-        console.error("Error cargando Firebase:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadTasks();
+    const unsub = onSnapshot(collection(db, "tareas"), (snap) => {
+      const data = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+      setTasks(data);
+    });
+    return () => unsub();
   }, []);
 
-  /* =========================
-     💾 GUARDAR EN FIREBASE
-     ========================= */
-  useEffect(() => {
-    if (loading) return;
+  // ➕ Nueva tarea
+  const addTask = async () => {
+    const title = prompt("Nueva tarea");
+    if (!title) return;
 
-    const saveTasks = async () => {
-      try {
-        await setDoc(doc(db, "boards", "main"), { tasks });
-      } catch (error) {
-        console.error("Error guardando Firebase:", error);
-      }
-    };
-
-    saveTasks();
-  }, [tasks, loading]);
-
-  /* =========================
-     ACCIONES
-     ========================= */
-  const addTask = () => {
-    if (!newTask.trim()) return;
-
-    setTasks({
-      ...tasks,
-      todo: [
-        ...tasks.todo,
-        { id: Date.now().toString(), text: newTask, completed: false },
-      ],
-    });
-
-    setNewTask("");
-  };
-
-  const deleteTask = (id) => {
-    setTasks((prev) => {
-      const copy = { ...prev };
-      for (const col in copy) {
-        copy[col] = copy[col].filter((t) => t.id !== id);
-      }
-      return copy;
+    await addDoc(collection(db, "tareas"), {
+      title,
+      status: "todo",
+      created: Date.now(),
     });
   };
 
-  const toggleComplete = (id) => {
-    setTasks((prev) => {
-      const copy = { ...prev };
-      for (const col in copy) {
-        copy[col] = copy[col].map((t) =>
-          t.id === id ? { ...t, completed: !t.completed } : t
-        );
-      }
-      return copy;
-    });
-  };
-
-  /* =========================
-     DRAG & DROP
-     ========================= */
-  const handleDragEnd = (result) => {
+  // 🔁 Drag terminado
+  const onDragEnd = async (result) => {
     if (!result.destination) return;
 
-    const src = result.source.droppableId;
-    const dst = result.destination.droppableId;
+    const { draggableId, destination } = result;
 
-    if (src === dst) {
-      const items = Array.from(tasks[src]);
-      const [moved] = items.splice(result.source.index, 1);
-      items.splice(result.destination.index, 0, moved);
-      setTasks({ ...tasks, [src]: items });
-      return;
-    }
-
-    const srcItems = Array.from(tasks[src]);
-    const dstItems = Array.from(tasks[dst]);
-
-    const [moved] = srcItems.splice(result.source.index, 1);
-    dstItems.splice(result.destination.index, 0, moved);
-
-    setTasks({
-      ...tasks,
-      [src]: srcItems,
-      [dst]: dstItems,
+    const taskRef = doc(db, "tareas", draggableId);
+    await updateDoc(taskRef, {
+      status: destination.droppableId,
     });
   };
 
-  /* =========================
-     LOADING
-     ========================= */
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-xl">
-        Cargando datos...
-      </div>
-    );
-  }
-
-  /* =========================
-     UI
-     ========================= */
-  const columns = [
-    {
-      id: "todo",
-      title: "To Do",
-      bg: "bg-blue-100/60",
-      card: "bg-blue-50",
-      text: "text-blue-700",
-    },
-    {
-      id: "proceso",
-      title: "En Proceso",
-      bg: "bg-yellow-100/60",
-      card: "bg-yellow-50",
-      text: "text-yellow-700",
-    },
-    {
-      id: "delegadas",
-      title: "Delegadas",
-      bg: "bg-green-100/60",
-      card: "bg-green-50",
-      text: "text-green-700",
-    },
-  ];
-
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <h1 className="text-3xl font-bold text-center mb-6">
-        Gestor de Tareas
+    <div className="min-h-screen bg-slate-100 p-4 overscroll-none touch-none">
+      <h1 className="text-2xl font-bold text-center mb-4">
+        Tablero de Tareas
       </h1>
 
-      {/* Nueva tarea */}
-      <div className="flex justify-center mb-6 gap-2">
-        <input
-          className="border border-gray-300 rounded p-2 w-64"
-          placeholder="Nueva tarea..."
-          value={newTask}
-          onChange={(e) => setNewTask(e.target.value)}
-        />
+      <div className="text-center mb-4">
         <button
           onClick={addTask}
-          className="bg-blue-600 text-white px-4 py-2 rounded"
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700"
         >
-          Agregar
+          + Nueva tarea
         </button>
       </div>
 
-      <DragDropContext onDragEnd={handleDragEnd}>
+      <DragDropContext onDragEnd={onDragEnd}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {columns.map((col) => (
-            <Droppable droppableId={col.id} key={col.id}>
+          {Object.entries(columns).map(([key, col]) => (
+            <Droppable droppableId={key} key={key}>
               {(provided) => (
                 <div
                   ref={provided.innerRef}
                   {...provided.droppableProps}
-                  className={`${col.bg} p-4 rounded-xl shadow-sm min-h-[300px] backdrop-blur`}
+                  className={`${col.bg} rounded-xl p-3 min-h-[400px]`}
                 >
-                  <h2 className={`font-bold mb-3 ${col.text}`}>
+                  <h2 className="font-semibold mb-3 text-center">
                     {col.title}
                   </h2>
 
-                  {tasks[col.id].map((task, index) => (
-                    <Draggable
-                      key={task.id}
-                      draggableId={task.id}
-                      index={index}
-                    >
-                      {(provided) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          {...provided.dragHandleProps}
-                          className={`p-3 ${col.card} rounded-lg mb-2 shadow-sm hover:shadow transition flex items-center justify-between`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={task.completed}
-                              onChange={() => toggleComplete(task.id)}
-                            />
-                            <span
-                              className={
-                                task.completed
-                                  ? "line-through text-gray-500"
-                                  : ""
+                  {tasks
+                    .filter((t) => t.status === key)
+                    .map((task, index) => (
+                      <Draggable
+                        key={task.id}
+                        draggableId={task.id}
+                        index={index}
+                      >
+                        {(provided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                            style={{
+                              ...provided.draggableProps.style,
+                            }}
+                            className={`
+                              ${col.card}
+                              p-3 mb-2 rounded-lg
+                              flex justify-between items-center
+                              transition
+                              touch-none select-none
+                              ${
+                                snapshot.isDragging
+                                  ? "shadow-xl scale-[1.02] opacity-90"
+                                  : "shadow-sm"
                               }
-                            >
-                              {task.text}
-                            </span>
-                          </div>
-
-                          <button
-                            onClick={() => deleteTask(task.id)}
-                            className="text-red-600 text-lg"
+                            `}
                           >
-                            🗑️
-                          </button>
-                        </div>
-                      )}
-                    </Draggable>
-                  ))}
+                            <span>{task.title}</span>
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
 
                   {provided.placeholder}
                 </div>

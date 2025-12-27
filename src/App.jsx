@@ -1,303 +1,280 @@
-import { useEffect, useState } from "react";
-import {
-  collection,
-  onSnapshot,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-} from "firebase/firestore";
+import { useState, useEffect } from "react";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { db } from "./firebase";
-
-const columns = [
-  { id: "todo", title: "To Do", color: "bg-blue-200/60" },
-  { id: "proceso", title: "Proceso", color: "bg-yellow-200/60" },
-  { id: "delegadas", title: "Delegadas", color: "bg-green-200/60" },
-];
+import {
+  doc,
+  getDoc,
+  setDoc
+} from "firebase/firestore";
 
 export default function App() {
-  const [tasks, setTasks] = useState([]);
+  const [tasks, setTasks] = useState({
+    todo: [],
+    proceso: [],
+    delegadas: [],
+  });
+
   const [newTask, setNewTask] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [editingTask, setEditingTask] = useState(null);
+  const [editText, setEditText] = useState("");
 
-  const [editingId, setEditingId] = useState(null);
-  const [editingText, setEditingText] = useState("");
-  const [editingAssignee, setEditingAssignee] = useState("");
-  const [editingDueDate, setEditingDueDate] = useState("");
-
-  /* 🔥 Firebase realtime */
+  /* =====================
+     🔥 CARGAR FIREBASE
+     ===================== */
   useEffect(() => {
-    return onSnapshot(collection(db, "tareas"), (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setTasks(data);
-    });
+    const load = async () => {
+      const ref = doc(db, "boards", "main");
+      const snap = await getDoc(ref);
+
+      if (snap.exists()) {
+        setTasks(snap.data().tasks);
+      } else {
+        const initial = {
+          tasks: {
+            todo: [],
+            proceso: [],
+            delegadas: [],
+          },
+        };
+        await setDoc(ref, initial);
+        setTasks(initial.tasks);
+      }
+      setLoading(false);
+    };
+    load();
   }, []);
 
-  /* ➕ Agregar tarea */
-  const addTask = async () => {
+  /* =====================
+     🔥 GUARDAR FIREBASE
+     ===================== */
+  useEffect(() => {
+    if (!loading) {
+      setDoc(doc(db, "boards", "main"), { tasks });
+    }
+  }, [tasks, loading]);
+
+  /* =====================
+     ➕ AGREGAR TAREA
+     ===================== */
+  const addTask = () => {
     if (!newTask.trim()) return;
 
-    const order = tasks.filter((t) => t.status === "todo").length;
-
-    await addDoc(collection(db, "tareas"), {
-      title: newTask.trim(),
-      completed: false,
-      assignee: "",
-      dueDate: "",
-      status: "todo",
-      order,
-      created: Date.now(),
-    });
-
-    setNewTask(""); // ✅ input queda en blanco
+    setTasks(prev => ({
+      ...prev,
+      todo: [
+        ...prev.todo,
+        {
+          id: Date.now().toString(),
+          text: newTask,
+          completed: false,
+        },
+      ],
+    }));
+    setNewTask("");
   };
 
-  /* ☑️ Marcar / desmarcar */
-  const toggleCompleted = async (task) => {
-    await updateDoc(doc(db, "tareas", task.id), {
-      completed: !task.completed,
-    });
-  };
-
-  /* ✏️ Guardar edición */
-  const saveEdit = async (task) => {
-    await updateDoc(doc(db, "tareas", task.id), {
-      title: editingText.trim(),
-      assignee: editingAssignee.trim(),
-      dueDate: editingDueDate,
-    });
-
-    setEditingId(null);
-    setEditingText("");
-    setEditingAssignee("");
-    setEditingDueDate("");
-  };
-
-  /* 🗑️ Eliminar */
-  const removeTask = async (task) => {
-    if (!window.confirm(`¿Eliminar "${task.title}"?`)) return;
-    await deleteDoc(doc(db, "tareas", task.id));
-  };
-
-  /* 🔀 Drag & Drop (reordenar y mover) */
-  const handleDragEnd = async ({ source, destination }) => {
-    if (!destination) return;
-
-    const src = source.droppableId;
-    const dst = destination.droppableId;
-
-    const srcTasks = tasks
-      .filter((t) => t.status === src)
-      .sort((a, b) => a.order - b.order);
-
-    const dstTasks =
-      src === dst
-        ? srcTasks
-        : tasks
-            .filter((t) => t.status === dst)
-            .sort((a, b) => a.order - b.order);
-
-    const [moved] = srcTasks.splice(source.index, 1);
-    dstTasks.splice(destination.index, 0, moved);
-
-    await Promise.all([
-      ...srcTasks.map((t, i) =>
-        updateDoc(doc(db, "tareas", t.id), { order: i })
+  /* =====================
+     ✏️ EDITAR
+     ===================== */
+  const saveEdit = (col, id) => {
+    setTasks(prev => ({
+      ...prev,
+      [col]: prev[col].map(t =>
+        t.id === id ? { ...t, text: editText } : t
       ),
-      ...dstTasks.map((t, i) =>
-        updateDoc(doc(db, "tareas", t.id), {
-          order: i,
-          status: dst,
-        })
-      ),
-    ]);
+    }));
+    setEditingTask(null);
   };
 
-  const today = new Date().toISOString().split("T")[0];
+  /* =====================
+     🗑️ ELIMINAR
+     ===================== */
+  const deleteTask = id => {
+    if (!confirm("¿Eliminar esta tarea?")) return;
+    setTasks(prev => {
+      const copy = { ...prev };
+      Object.keys(copy).forEach(
+        c => (copy[c] = copy[c].filter(t => t.id !== id))
+      );
+      return copy;
+    });
+  };
+
+  /* =====================
+     ✔️ COMPLETAR
+     ===================== */
+  const toggleComplete = id => {
+    setTasks(prev => {
+      const copy = { ...prev };
+      Object.keys(copy).forEach(col => {
+        copy[col] = copy[col].map(t =>
+          t.id === id ? { ...t, completed: !t.completed } : t
+        );
+      });
+      return copy;
+    });
+  };
+
+  /* =====================
+     🧲 DRAG CONTROLADO
+     ===================== */
+  const handleDragEnd = result => {
+    if (!result.destination) return;
+
+    const src = result.source.droppableId;
+    const dst = result.destination.droppableId;
+
+    const srcItems = Array.from(tasks[src]);
+    const [moved] = srcItems.splice(result.source.index, 1);
+
+    const dstItems =
+      src === dst ? srcItems : Array.from(tasks[dst]);
+
+    dstItems.splice(result.destination.index, 0, moved);
+
+    setTasks({
+      ...tasks,
+      [src]: src === dst ? dstItems : srcItems,
+      [dst]: dstItems,
+    });
+
+    setSelectedTaskId(null);
+  };
+
+  if (loading) {
+    return (
+      <div className="p-10 text-center text-xl">
+        Cargando datos...
+      </div>
+    );
+  }
+
+  const colors = {
+    todo: "bg-blue-100/60",
+    proceso: "bg-yellow-100/60",
+    delegadas: "bg-green-100/60",
+  };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4">
-      <h1 className="text-3xl font-bold text-center mb-6">
+    <div className="p-4 min-h-screen bg-gray-100">
+      <h1 className="text-3xl font-bold text-center mb-4">
         Gestor de Tareas
       </h1>
 
-      {/* Nueva tarea */}
+      {/* NUEVA TAREA */}
       <div className="flex justify-center gap-2 mb-6">
         <input
+          className="border rounded px-3 py-2 w-64"
           value={newTask}
-          onChange={(e) => setNewTask(e.target.value)}
+          onChange={e => setNewTask(e.target.value)}
           placeholder="Nueva tarea..."
-          className="border rounded p-2 w-64"
         />
         <button
           onClick={addTask}
-          className="bg-blue-600 text-white px-4 py-2 rounded"
+          className="bg-blue-600 text-white px-4 rounded"
         >
           Agregar
         </button>
       </div>
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {columns.map((col) => {
-            const colTasks = tasks
-              .filter((t) => t.status === col.id)
-              .sort((a, b) => a.order - b.order);
+        <div className="grid md:grid-cols-3 gap-4">
+          {["todo", "proceso", "delegadas"].map(col => (
+            <Droppable droppableId={col} key={col}>
+              {p => (
+                <div
+                  ref={p.innerRef}
+                  {...p.droppableProps}
+                  className={`${colors[col]} rounded p-3 min-h-[300px]`}
+                >
+                  <h2 className="font-semibold text-lg mb-3 capitalize">
+                    {col}
+                  </h2>
 
-            return (
-              <Droppable key={col.id} droppableId={col.id}>
-                {(p) => (
-                  <div
-                    ref={p.innerRef}
-                    {...p.droppableProps}
-                    className={`p-4 rounded shadow min-h-[300px] ${col.color}`}
-                  >
-                    <h2 className="text-xl font-semibold mb-3">
-                      {col.title}
-                    </h2>
-
-                    {colTasks.map((task, index) => {
-                      const overdue =
-                        task.dueDate && task.dueDate < today;
-
-                      return (
-                        <Draggable
-                          key={task.id}
-                          draggableId={task.id}
-                          index={index}
+                  {tasks[col].map((task, i) => (
+                    <Draggable
+                      key={task.id}
+                      draggableId={task.id}
+                      index={i}
+                      isDragDisabled={selectedTaskId !== task.id}
+                    >
+                      {d => (
+                        <div
+                          ref={d.innerRef}
+                          {...d.draggableProps}
+                          {...d.dragHandleProps}
+                          onClick={() =>
+                            setSelectedTaskId(task.id)
+                          }
+                          className={`bg-white rounded p-3 mb-2 shadow flex justify-between items-center
+                          cursor-pointer
+                          ${
+                            selectedTaskId === task.id
+                              ? "ring-2 ring-blue-500"
+                              : ""
+                          }`}
                         >
-                          {(p) => (
-                            <div
-                              ref={p.innerRef}
-                              {...p.draggableProps}
-                              {...p.dragHandleProps}
-                              className={`bg-white/80 p-3 rounded mb-2 shadow border-l-4 ${
-                                overdue
-                                  ? "border-red-500"
-                                  : "border-transparent"
-                              }`}
-                            >
-                              <div className="flex justify-between items-start gap-3">
-                                {/* IZQUIERDA */}
-                                <div className="flex-1">
-                                  {editingId === task.id ? (
-                                    <>
-                                      <input
-                                        value={editingText}
-                                        onChange={(e) =>
-                                          setEditingText(e.target.value)
-                                        }
-                                        className="border rounded p-1 w-full mb-1"
-                                      />
-                                      <input
-                                        placeholder="Responsable"
-                                        value={editingAssignee}
-                                        onChange={(e) =>
-                                          setEditingAssignee(e.target.value)
-                                        }
-                                        className="border rounded p-1 w-full mb-1"
-                                      />
-                                      <input
-                                        type="date"
-                                        value={editingDueDate}
-                                        onChange={(e) =>
-                                          setEditingDueDate(e.target.value)
-                                        }
-                                        className="border rounded p-1 w-full"
-                                      />
-                                      <button
-                                        onClick={() => saveEdit(task)}
-                                        className="mt-2 text-blue-600 text-sm"
-                                      >
-                                        Guardar
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <div className="flex items-start gap-2">
-                                      {/* CHECKBOX */}
-                                      <input
-                                        type="checkbox"
-                                        checked={task.completed}
-                                        onChange={() =>
-                                          toggleCompleted(task)
-                                        }
-                                        onClick={(e) =>
-                                          e.stopPropagation()
-                                        }
-                                        className="mt-1"
-                                      />
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={task.completed}
+                              onChange={() =>
+                                toggleComplete(task.id)
+                              }
+                            />
+                            {editingTask === task.id ? (
+                              <input
+                                className="border rounded px-2"
+                                value={editText}
+                                onChange={e =>
+                                  setEditText(e.target.value)
+                                }
+                                onBlur={() =>
+                                  saveEdit(col, task.id)
+                                }
+                                autoFocus
+                              />
+                            ) : (
+                              <span
+                                className={
+                                  task.completed
+                                    ? "line-through text-gray-500"
+                                    : ""
+                                }
+                              >
+                                {task.text}
+                              </span>
+                            )}
+                          </div>
 
-                                      <div className="flex-1">
-                                        <p
-                                          className={`font-medium ${
-                                            task.completed
-                                              ? "line-through text-gray-500"
-                                              : ""
-                                          }`}
-                                        >
-                                          {task.title}
-                                        </p>
-
-                                        {task.assignee && (
-                                          <p className="text-sm text-gray-600">
-                                            👤 {task.assignee}
-                                          </p>
-                                        )}
-
-                                        {task.dueDate && (
-                                          <p
-                                            className={`text-sm ${
-                                              overdue
-                                                ? "text-red-600 font-semibold"
-                                                : "text-gray-600"
-                                            }`}
-                                          >
-                                            📅 {task.dueDate}
-                                          </p>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* DERECHA - ICONOS */}
-                                {editingId !== task.id && (
-                                  <div className="flex gap-2 text-lg">
-                                    <button
-                                      onClick={() => {
-                                        setEditingId(task.id);
-                                        setEditingText(task.title);
-                                        setEditingAssignee(
-                                          task.assignee || ""
-                                        );
-                                        setEditingDueDate(
-                                          task.dueDate || ""
-                                        );
-                                      }}
-                                    >
-                                      ✏️
-                                    </button>
-
-                                    <button
-                                      onClick={() => removeTask(task)}
-                                    >
-                                      🗑️
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </Draggable>
-                      );
-                    })}
-
-                    {p.placeholder}
-                  </div>
-                )}
-              </Droppable>
-            );
-          })}
+                          <div className="flex gap-3 text-xl">
+                            ✏️
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                setEditingTask(task.id);
+                                setEditText(task.text);
+                              }}
+                            />
+                            🗑️
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                deleteTask(task.id);
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
+                  {p.placeholder}
+                </div>
+              )}
+            </Droppable>
+          ))}
         </div>
       </DragDropContext>
     </div>

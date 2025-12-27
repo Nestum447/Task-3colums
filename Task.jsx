@@ -11,15 +11,11 @@
  * Pega este archivo como App.jsx en un proyecto creado con Vite / Create React App
  * y arranca la app. Funciona en móvil, permite arrastrar con el dedo entre columnas.
  */
-modificado nestor
 
-/** 
-//* import React, { useState } from 'react';
-// * import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+import React, { useState } from 'react';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
-// const initialColumns = {
-/*
-
+const initialColumns = {
   todo: {
     name: 'To Do',
     items: [
@@ -181,4 +177,4 @@ function AddTask({ colId, onAdd }) {
       <button className="px-3 py-1 bg-indigo-600 text-white rounded text-sm" type="submit">Agregar</button>
     </form>
   );
-}
+       }

@@ -10,6 +10,7 @@ import {
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { db } from "./firebase";
 
+/* ===== Columnas ===== */
 const columns = [
   { id: "todo", title: "To Do", color: "bg-blue-200/60" },
   { id: "proceso", title: "Proceso", color: "bg-yellow-200/60" },
@@ -19,27 +20,53 @@ const columns = [
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
+
   const [editingId, setEditingId] = useState(null);
   const [editingText, setEditingText] = useState("");
+  const [editingAssignee, setEditingAssignee] = useState("");
+  const [editingDueDate, setEditingDueDate] = useState("");
 
-  /* =========================
-     🔥 CARGAR DESDE FIREBASE
-     ========================= */
+  /* 🔔 Permiso de notificaciones */
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "tareas"), (snap) => {
-      const data = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-      setTasks(data);
-    });
-
-    return () => unsub();
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
   }, []);
 
-  /* =========================
-     ➕ AGREGAR TAREA
-     ========================= */
+  /* 🔥 Cargar tareas */
+  useEffect(() => {
+    return onSnapshot(collection(db, "tareas"), (snap) => {
+      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setTasks(data);
+      checkNotifications(data);
+    });
+  }, []);
+
+  /* 🔔 Revisar vencimientos */
+  const checkNotifications = (tasks) => {
+    if (!("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+
+    const today = new Date().toISOString().split("T")[0];
+
+    tasks.forEach((task) => {
+      if (!task.dueDate) return;
+
+      if (task.dueDate === today) {
+        new Notification("⏰ Tarea vence hoy", {
+          body: task.title,
+        });
+      }
+
+      if (task.dueDate < today) {
+        new Notification("⚠️ Tarea vencida", {
+          body: task.title,
+        });
+      }
+    });
+  };
+
+  /* ➕ Agregar tarea */
   const addTask = async () => {
     if (!newTask.trim()) return;
 
@@ -47,6 +74,8 @@ export default function App() {
 
     await addDoc(collection(db, "tareas"), {
       title: newTask.trim(),
+      assignee: "",
+      dueDate: "",
       status: "todo",
       order,
       created: Date.now(),
@@ -55,87 +84,61 @@ export default function App() {
     setNewTask("");
   };
 
-  /* =========================
-     ✏️ EDITAR TAREA
-     ========================= */
+  /* ✏️ Guardar edición */
   const saveEdit = async (task) => {
-    if (!editingText.trim()) {
-      setEditingId(null);
-      return;
-    }
-
     await updateDoc(doc(db, "tareas", task.id), {
       title: editingText.trim(),
+      assignee: editingAssignee.trim(),
+      dueDate: editingDueDate,
     });
 
     setEditingId(null);
     setEditingText("");
+    setEditingAssignee("");
+    setEditingDueDate("");
   };
 
-  /* =========================
-     🗑️ ELIMINAR TAREA (CONFIRMACIÓN)
-     ========================= */
+  /* 🗑️ Eliminar */
   const removeTask = async (task) => {
-    const ok = window.confirm(
-      `¿Eliminar la tarea:\n\n"${task.title}" ?`
-    );
-
-    if (!ok) return;
-
+    if (!window.confirm(`¿Eliminar "${task.title}"?`)) return;
     await deleteDoc(doc(db, "tareas", task.id));
-
-    // Reordenar la columna después de borrar
-    const colTasks = tasks
-      .filter((t) => t.status === task.status && t.id !== task.id)
-      .sort((a, b) => a.order - b.order);
-
-    await Promise.all(
-      colTasks.map((t, i) =>
-        updateDoc(doc(db, "tareas", t.id), { order: i })
-      )
-    );
   };
 
-  /* =========================
-     🔀 DRAG & DROP
-     ========================= */
+  /* 🔀 Drag & Drop */
   const handleDragEnd = async ({ source, destination }) => {
     if (!destination) return;
 
-    const sourceCol = source.droppableId;
-    const destCol = destination.droppableId;
+    const src = source.droppableId;
+    const dst = destination.droppableId;
 
-    const sourceTasks = tasks
-      .filter((t) => t.status === sourceCol)
+    const srcTasks = tasks
+      .filter((t) => t.status === src)
       .sort((a, b) => a.order - b.order);
 
-    const destTasks =
-      sourceCol === destCol
-        ? sourceTasks
+    const dstTasks =
+      src === dst
+        ? srcTasks
         : tasks
-            .filter((t) => t.status === destCol)
+            .filter((t) => t.status === dst)
             .sort((a, b) => a.order - b.order);
 
-    const [moved] = sourceTasks.splice(source.index, 1);
-    destTasks.splice(destination.index, 0, moved);
+    const [moved] = srcTasks.splice(source.index, 1);
+    dstTasks.splice(destination.index, 0, moved);
 
-    const updates = [];
-
-    sourceTasks.forEach((t, i) =>
-      updates.push(updateDoc(doc(db, "tareas", t.id), { order: i }))
-    );
-
-    destTasks.forEach((t, i) =>
-      updates.push(
+    await Promise.all([
+      ...srcTasks.map((t, i) =>
+        updateDoc(doc(db, "tareas", t.id), { order: i })
+      ),
+      ...dstTasks.map((t, i) =>
         updateDoc(doc(db, "tareas", t.id), {
           order: i,
-          status: destCol,
+          status: dst,
         })
-      )
-    );
-
-    await Promise.all(updates);
+      ),
+    ]);
   };
+
+  const today = new Date().toISOString().split("T")[0];
 
   return (
     <div className="min-h-screen bg-gray-100 p-4">
@@ -143,7 +146,7 @@ export default function App() {
         Gestor de Tareas
       </h1>
 
-      {/* ➕ NUEVA TAREA */}
+      {/* Nueva tarea */}
       <div className="flex justify-center gap-2 mb-6">
         <input
           value={newTask}
@@ -167,68 +170,124 @@ export default function App() {
               .sort((a, b) => a.order - b.order);
 
             return (
-              <Droppable droppableId={col.id} key={col.id}>
-                {(provided) => (
+              <Droppable key={col.id} droppableId={col.id}>
+                {(p) => (
                   <div
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
+                    ref={p.innerRef}
+                    {...p.droppableProps}
                     className={`p-4 rounded shadow min-h-[300px] ${col.color}`}
                   >
                     <h2 className="text-xl font-semibold mb-3">
                       {col.title}
                     </h2>
 
-                    {colTasks.map((task, index) => (
-                      <Draggable
-                        key={task.id}
-                        draggableId={task.id}
-                        index={index}
-                      >
-                        {(provided) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            className="bg-white/80 backdrop-blur p-3 rounded mb-2 shadow flex items-center"
-                          >
-                            {editingId === task.id ? (
-                              <input
-                                autoFocus
-                                value={editingText}
-                                onChange={(e) =>
-                                  setEditingText(e.target.value)
-                                }
-                                onBlur={() => saveEdit(task)}
-                                onKeyDown={(e) =>
-                                  e.key === "Enter" && saveEdit(task)
-                                }
-                                className="border rounded p-1 flex-1 mr-2"
-                              />
-                            ) : (
-                              <span
-                                onClick={() => {
-                                  setEditingId(task.id);
-                                  setEditingText(task.title);
-                                }}
-                                className="cursor-text flex-1"
-                              >
-                                {task.title}
-                              </span>
-                            )}
+                    {colTasks.map((task, index) => {
+                      const overdue =
+                        task.dueDate && task.dueDate < today;
 
-                            <button
-                              onClick={() => removeTask(task)}
-                              className="text-red-600 ml-2"
-                              title="Eliminar"
+                      return (
+                        <Draggable
+                          key={task.id}
+                          draggableId={task.id}
+                          index={index}
+                        >
+                          {(p) => (
+                            <div
+                              ref={p.innerRef}
+                              {...p.draggableProps}
+                              {...p.dragHandleProps}
+                              className={`bg-white/80 p-3 rounded mb-2 shadow border-l-4 ${
+                                overdue
+                                  ? "border-red-500"
+                                  : "border-transparent"
+                              }`}
                             >
-                              🗑️
-                            </button>
-                          </div>
-                        )}
-                      </Draggable>
-                    ))}
+                              {editingId === task.id ? (
+                                <>
+                                  <input
+                                    value={editingText}
+                                    onChange={(e) =>
+                                      setEditingText(e.target.value)
+                                    }
+                                    className="border rounded p-1 w-full mb-1"
+                                  />
+                                  <input
+                                    placeholder="Responsable"
+                                    value={editingAssignee}
+                                    onChange={(e) =>
+                                      setEditingAssignee(e.target.value)
+                                    }
+                                    className="border rounded p-1 w-full mb-1"
+                                  />
+                                  <input
+                                    type="date"
+                                    value={editingDueDate}
+                                    onChange={(e) =>
+                                      setEditingDueDate(e.target.value)
+                                    }
+                                    className="border rounded p-1 w-full"
+                                  />
+                                  <button
+                                    onClick={() => saveEdit(task)}
+                                    className="mt-2 text-blue-600 text-sm"
+                                  >
+                                    Guardar
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="font-medium">
+                                    {task.title}
+                                  </p>
 
-                    {provided.placeholder}
+                                  {task.assignee && (
+                                    <p className="text-sm text-gray-600">
+                                      👤 {task.assignee}
+                                    </p>
+                                  )}
+
+                                  {task.dueDate && (
+                                    <p
+                                      className={`text-sm ${
+                                        overdue
+                                          ? "text-red-600 font-semibold"
+                                          : "text-gray-600"
+                                      }`}
+                                    >
+                                      📅 {task.dueDate}
+                                    </p>
+                                  )}
+
+                                  <div className="flex gap-3 mt-2">
+                                    <button
+                                      onClick={() => {
+                                        setEditingId(task.id);
+                                        setEditingText(task.title);
+                                        setEditingAssignee(
+                                          task.assignee || ""
+                                        );
+                                        setEditingDueDate(
+                                          task.dueDate || ""
+                                        );
+                                      }}
+                                    >
+                                      ✏️
+                                    </button>
+                                    <button
+                                      onClick={() => removeTask(task)}
+                                    >
+                                      🗑️
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </Draggable>
+                      );
+                    })}
+
+                    {p.placeholder}
                   </div>
                 )}
               </Droppable>

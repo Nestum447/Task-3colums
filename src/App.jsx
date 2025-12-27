@@ -4,6 +4,7 @@ import {
   onSnapshot,
   addDoc,
   updateDoc,
+  deleteDoc,
   doc,
 } from "firebase/firestore";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
@@ -18,6 +19,8 @@ const columns = [
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editingText, setEditingText] = useState("");
 
   /* =========================
      🔥 CARGAR DESDE FIREBASE
@@ -46,19 +49,57 @@ export default function App() {
       title: newTask.trim(),
       status: "todo",
       order,
-      completed: false,
       created: Date.now(),
     });
 
-    // ✅ LIMPIA INPUT
     setNewTask("");
   };
 
   /* =========================
-     🔀 DRAG & DROP (ROBUSTO)
+     ✏️ EDITAR TAREA
      ========================= */
-  const handleDragEnd = async (result) => {
-    const { source, destination, draggableId } = result;
+  const saveEdit = async (task) => {
+    if (!editingText.trim()) {
+      setEditingId(null);
+      return;
+    }
+
+    await updateDoc(doc(db, "tareas", task.id), {
+      title: editingText.trim(),
+    });
+
+    setEditingId(null);
+    setEditingText("");
+  };
+
+  /* =========================
+     🗑️ ELIMINAR TAREA (CONFIRMACIÓN)
+     ========================= */
+  const removeTask = async (task) => {
+    const ok = window.confirm(
+      `¿Eliminar la tarea:\n\n"${task.title}" ?`
+    );
+
+    if (!ok) return;
+
+    await deleteDoc(doc(db, "tareas", task.id));
+
+    // Reordenar la columna después de borrar
+    const colTasks = tasks
+      .filter((t) => t.status === task.status && t.id !== task.id)
+      .sort((a, b) => a.order - b.order);
+
+    await Promise.all(
+      colTasks.map((t, i) =>
+        updateDoc(doc(db, "tareas", t.id), { order: i })
+      )
+    );
+  };
+
+  /* =========================
+     🔀 DRAG & DROP
+     ========================= */
+  const handleDragEnd = async ({ source, destination }) => {
     if (!destination) return;
 
     const sourceCol = source.droppableId;
@@ -75,8 +116,7 @@ export default function App() {
             .filter((t) => t.status === destCol)
             .sort((a, b) => a.order - b.order);
 
-    const moved = sourceTasks[source.index];
-    sourceTasks.splice(source.index, 1);
+    const [moved] = sourceTasks.splice(source.index, 1);
     destTasks.splice(destination.index, 0, moved);
 
     const updates = [];
@@ -149,9 +189,40 @@ export default function App() {
                             ref={provided.innerRef}
                             {...provided.draggableProps}
                             {...provided.dragHandleProps}
-                            className="bg-white/80 backdrop-blur p-3 rounded mb-2 shadow cursor-grab active:cursor-grabbing"
+                            className="bg-white/80 backdrop-blur p-3 rounded mb-2 shadow flex items-center"
                           >
-                            {task.title}
+                            {editingId === task.id ? (
+                              <input
+                                autoFocus
+                                value={editingText}
+                                onChange={(e) =>
+                                  setEditingText(e.target.value)
+                                }
+                                onBlur={() => saveEdit(task)}
+                                onKeyDown={(e) =>
+                                  e.key === "Enter" && saveEdit(task)
+                                }
+                                className="border rounded p-1 flex-1 mr-2"
+                              />
+                            ) : (
+                              <span
+                                onClick={() => {
+                                  setEditingId(task.id);
+                                  setEditingText(task.title);
+                                }}
+                                className="cursor-text flex-1"
+                              >
+                                {task.title}
+                              </span>
+                            )}
+
+                            <button
+                              onClick={() => removeTask(task)}
+                              className="text-red-600 ml-2"
+                              title="Eliminar"
+                            >
+                              🗑️
+                            </button>
                           </div>
                         )}
                       </Draggable>

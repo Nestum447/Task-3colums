@@ -25,13 +25,6 @@ export default function App() {
   const [editingAssignee, setEditingAssignee] = useState("");
   const [editingDueDate, setEditingDueDate] = useState("");
 
-  /* 🔔 Permiso notificaciones */
-  useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-  }, []);
-
   /* 🔥 Firebase realtime */
   useEffect(() => {
     return onSnapshot(collection(db, "tareas"), (snap) => {
@@ -40,7 +33,7 @@ export default function App() {
     });
   }, []);
 
-  /* ➕ Agregar */
+  /* ➕ Agregar tarea */
   const addTask = async () => {
     if (!newTask.trim()) return;
 
@@ -48,6 +41,7 @@ export default function App() {
 
     await addDoc(collection(db, "tareas"), {
       title: newTask.trim(),
+      completed: false,
       assignee: "",
       dueDate: "",
       status: "todo",
@@ -55,7 +49,14 @@ export default function App() {
       created: Date.now(),
     });
 
-    setNewTask("");
+    setNewTask(""); // ✅ input queda en blanco
+  };
+
+  /* ☑️ Marcar / desmarcar */
+  const toggleCompleted = async (task) => {
+    await updateDoc(doc(db, "tareas", task.id), {
+      completed: !task.completed,
+    });
   };
 
   /* ✏️ Guardar edición */
@@ -78,7 +79,7 @@ export default function App() {
     await deleteDoc(doc(db, "tareas", task.id));
   };
 
-  /* 🔀 Drag */
+  /* 🔀 Drag & Drop (reordenar y mover) */
   const handleDragEnd = async ({ source, destination }) => {
     if (!destination) return;
 
@@ -176,7 +177,6 @@ export default function App() {
                                   : "border-transparent"
                               }`}
                             >
-                              {/* CONTENEDOR */}
                               <div className="flex justify-between items-start gap-3">
                                 {/* IZQUIERDA */}
                                 <div className="flex-1">
@@ -213,29 +213,50 @@ export default function App() {
                                       </button>
                                     </>
                                   ) : (
-                                    <>
-                                      <p className="font-medium">
-                                        {task.title}
-                                      </p>
+                                    <div className="flex items-start gap-2">
+                                      {/* CHECKBOX */}
+                                      <input
+                                        type="checkbox"
+                                        checked={task.completed}
+                                        onChange={() =>
+                                          toggleCompleted(task)
+                                        }
+                                        onClick={(e) =>
+                                          e.stopPropagation()
+                                        }
+                                        className="mt-1"
+                                      />
 
-                                      {task.assignee && (
-                                        <p className="text-sm text-gray-600">
-                                          👤 {task.assignee}
-                                        </p>
-                                      )}
-
-                                      {task.dueDate && (
+                                      <div className="flex-1">
                                         <p
-                                          className={`text-sm ${
-                                            overdue
-                                              ? "text-red-600 font-semibold"
-                                              : "text-gray-600"
+                                          className={`font-medium ${
+                                            task.completed
+                                              ? "line-through text-gray-500"
+                                              : ""
                                           }`}
                                         >
-                                          📅 {task.dueDate}
+                                          {task.title}
                                         </p>
-                                      )}
-                                    </>
+
+                                        {task.assignee && (
+                                          <p className="text-sm text-gray-600">
+                                            👤 {task.assignee}
+                                          </p>
+                                        )}
+
+                                        {task.dueDate && (
+                                          <p
+                                            className={`text-sm ${
+                                              overdue
+                                                ? "text-red-600 font-semibold"
+                                                : "text-gray-600"
+                                            }`}
+                                          >
+                                            📅 {task.dueDate}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
                                   )}
                                 </div>
 
@@ -253,14 +274,12 @@ export default function App() {
                                           task.dueDate || ""
                                         );
                                       }}
-                                      className="hover:scale-110"
                                     >
                                       ✏️
                                     </button>
 
                                     <button
                                       onClick={() => removeTask(task)}
-                                      className="hover:scale-110"
                                     >
                                       🗑️
                                     </button>

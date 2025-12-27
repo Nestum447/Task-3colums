@@ -5,7 +5,9 @@ import { db } from "./firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
 export default function App() {
-
+  /* =========================
+     ESTADOS
+     ========================= */
   const [tasks, setTasks] = useState({
     todo: [],
     proceso: [],
@@ -43,8 +45,8 @@ export default function App() {
           await setDoc(ref, { tasks: initialTasks });
           setTasks(initialTasks);
         }
-      } catch (err) {
-        console.error("🔥 Error cargando Firebase:", err);
+      } catch (error) {
+        console.error("Error cargando Firebase:", error);
       } finally {
         setLoading(false);
       }
@@ -59,20 +61,34 @@ export default function App() {
   useEffect(() => {
     if (loading) return;
 
-    const save = async () => {
+    const saveTasks = async () => {
       try {
         await setDoc(doc(db, "boards", "main"), { tasks });
-      } catch (err) {
-        console.error("🔥 Error guardando Firebase:", err);
+      } catch (error) {
+        console.error("Error guardando Firebase:", error);
       }
     };
 
-    save();
+    saveTasks();
   }, [tasks, loading]);
 
   /* =========================
-     🗑️ BORRAR
+     ACCIONES
      ========================= */
+  const addTask = () => {
+    if (!newTask.trim()) return;
+
+    setTasks({
+      ...tasks,
+      todo: [
+        ...tasks.todo,
+        { id: Date.now().toString(), text: newTask, completed: false },
+      ],
+    });
+
+    setNewTask("");
+  };
+
   const deleteTask = (id) => {
     setTasks((prev) => {
       const copy = { ...prev };
@@ -83,9 +99,6 @@ export default function App() {
     });
   };
 
-  /* =========================
-     ✅ COMPLETAR
-     ========================= */
   const toggleComplete = (id) => {
     setTasks((prev) => {
       const copy = { ...prev };
@@ -99,7 +112,7 @@ export default function App() {
   };
 
   /* =========================
-     🧲 DRAG & DROP
+     DRAG & DROP
      ========================= */
   const handleDragEnd = (result) => {
     if (!result.destination) return;
@@ -129,22 +142,8 @@ export default function App() {
   };
 
   /* =========================
-     ➕ AGREGAR
+     LOADING
      ========================= */
-  const addTask = () => {
-    if (!newTask.trim()) return;
-
-    setTasks({
-      ...tasks,
-      todo: [
-        ...tasks.todo,
-        { id: Date.now().toString(), text: newTask, completed: false },
-      ],
-    });
-
-    setNewTask("");
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-xl">
@@ -153,48 +152,111 @@ export default function App() {
     );
   }
 
+  /* =========================
+     UI
+     ========================= */
+  const columns = [
+    {
+      id: "todo",
+      title: "To Do",
+      bg: "bg-blue-100/60",
+      card: "bg-blue-50",
+      text: "text-blue-700",
+    },
+    {
+      id: "proceso",
+      title: "En Proceso",
+      bg: "bg-yellow-100/60",
+      card: "bg-yellow-50",
+      text: "text-yellow-700",
+    },
+    {
+      id: "delegadas",
+      title: "Delegadas",
+      bg: "bg-green-100/60",
+      card: "bg-green-50",
+      text: "text-green-700",
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-gray-100 p-6">
       <h1 className="text-3xl font-bold text-center mb-6">
         Gestor de Tareas
       </h1>
 
+      {/* Nueva tarea */}
       <div className="flex justify-center mb-6 gap-2">
         <input
-          className="border p-2 w-64"
+          className="border border-gray-300 rounded p-2 w-64"
+          placeholder="Nueva tarea..."
           value={newTask}
           onChange={(e) => setNewTask(e.target.value)}
-          placeholder="Nueva tarea..."
         />
-        <button onClick={addTask} className="bg-blue-600 text-white px-4">
+        <button
+          onClick={addTask}
+          className="bg-blue-600 text-white px-4 py-2 rounded"
+        >
           Agregar
         </button>
       </div>
 
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {["todo", "proceso", "delegadas"].map((col) => (
-            <Droppable droppableId={col} key={col}>
-              {(p) => (
-                <div ref={p.innerRef} {...p.droppableProps}
-                  className="bg-white p-4 rounded shadow min-h-[300px]"
+          {columns.map((col) => (
+            <Droppable droppableId={col.id} key={col.id}>
+              {(provided) => (
+                <div
+                  ref={provided.innerRef}
+                  {...provided.droppableProps}
+                  className={`${col.bg} p-4 rounded-xl shadow-sm min-h-[300px] backdrop-blur`}
                 >
-                  <h2 className="font-bold capitalize mb-3">{col}</h2>
+                  <h2 className={`font-bold mb-3 ${col.text}`}>
+                    {col.title}
+                  </h2>
 
-                  {tasks[col].map((task, i) => (
-                    <Draggable key={task.id} draggableId={task.id} index={i}>
-                      {(p) => (
-                        <div ref={p.innerRef} {...p.draggableProps}
-                          {...p.dragHandleProps}
-                          className="p-3 bg-gray-100 rounded mb-2 flex justify-between"
+                  {tasks[col.id].map((task, index) => (
+                    <Draggable
+                      key={task.id}
+                      draggableId={task.id}
+                      index={index}
+                    >
+                      {(provided) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          {...provided.dragHandleProps}
+                          className={`p-3 ${col.card} rounded-lg mb-2 shadow-sm hover:shadow transition flex items-center justify-between`}
                         >
-                          <span>{task.text}</span>
-                          <button onClick={() => deleteTask(task.id)}>🗑️</button>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={task.completed}
+                              onChange={() => toggleComplete(task.id)}
+                            />
+                            <span
+                              className={
+                                task.completed
+                                  ? "line-through text-gray-500"
+                                  : ""
+                              }
+                            >
+                              {task.text}
+                            </span>
+                          </div>
+
+                          <button
+                            onClick={() => deleteTask(task.id)}
+                            className="text-red-600 text-lg"
+                          >
+                            🗑️
+                          </button>
                         </div>
                       )}
                     </Draggable>
                   ))}
-                  {p.placeholder}
+
+                  {provided.placeholder}
                 </div>
               )}
             </Droppable>

@@ -1,58 +1,29 @@
 import { useEffect, useState } from "react";
-import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
-
-// Firebase
-import { initializeApp } from "firebase/app";
 import {
-  getFirestore,
   collection,
-  addDoc,
   onSnapshot,
+  addDoc,
   updateDoc,
   doc,
-  query,
-  orderBy,
 } from "firebase/firestore";
+import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
+import { db } from "./firebase";
 
-/* ======================
-   FIREBASE CONFIG
-====================== */
-const firebaseConfig = {
-  apiKey: "TU_API_KEY",
-  authDomain: "TU_AUTH_DOMAIN",
-  projectId: "TU_PROJECT_ID",
-  storageBucket: "TU_STORAGE",
-  messagingSenderId: "TU_SENDER_ID",
-  appId: "TU_APP_ID",
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-/* ======================
-   COLUMNAS
-====================== */
-const columns = {
-  todo: { title: "Todo", bg: "bg-blue-100/60", card: "bg-blue-50/90" },
-  proceso: { title: "Proceso", bg: "bg-yellow-100/60", card: "bg-yellow-50/90" },
-  delegadas: { title: "Delegadas", bg: "bg-green-100/60", card: "bg-green-50/90" },
-};
+const columns = [
+  { id: "todo", title: "To Do", color: "bg-blue-200/60" },
+  { id: "proceso", title: "Proceso", color: "bg-yellow-200/60" },
+  { id: "delegadas", title: "Delegadas", color: "bg-green-200/60" },
+];
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
 
-  /* ======================
-     CARGAR DESDE FIREBASE
-  ====================== */
+  /* =========================
+     🔥 CARGAR DESDE FIREBASE
+     ========================= */
   useEffect(() => {
-    const q = query(
-      collection(db, "tareas"),
-      orderBy("status"),
-      orderBy("order")
-    );
-
-    const unsub = onSnapshot(q, (snap) => {
+    const unsub = onSnapshot(collection(db, "tareas"), (snap) => {
       const data = snap.docs.map((d) => ({
         id: d.id,
         ...d.data(),
@@ -63,18 +34,19 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  /* ======================
-     AGREGAR TAREA
-  ====================== */
+  /* =========================
+     ➕ AGREGAR TAREA
+     ========================= */
   const addTask = async () => {
     if (!newTask.trim()) return;
 
-    const todoCount = tasks.filter((t) => t.status === "todo").length;
+    const order = tasks.filter((t) => t.status === "todo").length;
 
     await addDoc(collection(db, "tareas"), {
       title: newTask.trim(),
       status: "todo",
-      order: todoCount,
+      order,
+      completed: false,
       created: Date.now(),
     });
 
@@ -82,112 +54,102 @@ export default function App() {
     setNewTask("");
   };
 
-  /* ======================
-     DRAG & DROP
-  ====================== */
-  const onDragEnd = async ({ source, destination, draggableId }) => {
+  /* =========================
+     🔀 DRAG & DROP (ROBUSTO)
+     ========================= */
+  const handleDragEnd = async (result) => {
+    const { source, destination, draggableId } = result;
     if (!destination) return;
 
-    if (
-      source.droppableId === destination.droppableId &&
-      source.index === destination.index
-    ) {
-      return;
-    }
+    const sourceCol = source.droppableId;
+    const destCol = destination.droppableId;
 
-    const columnTasks = tasks.filter(
-      (t) => t.status === source.droppableId
-    );
+    const sourceTasks = tasks
+      .filter((t) => t.status === sourceCol)
+      .sort((a, b) => a.order - b.order);
 
-    const movedTask = columnTasks[source.index];
-
-    // Quitar de origen
-    columnTasks.splice(source.index, 1);
-
-    // Insertar en destino
     const destTasks =
-      source.droppableId === destination.droppableId
-        ? columnTasks
-        : tasks.filter((t) => t.status === destination.droppableId);
+      sourceCol === destCol
+        ? sourceTasks
+        : tasks
+            .filter((t) => t.status === destCol)
+            .sort((a, b) => a.order - b.order);
 
-    destTasks.splice(destination.index, 0, {
-      ...movedTask,
-      status: destination.droppableId,
-    });
+    const moved = sourceTasks[source.index];
+    sourceTasks.splice(source.index, 1);
+    destTasks.splice(destination.index, 0, moved);
 
     const updates = [];
 
-    destTasks.forEach((t, i) => {
+    sourceTasks.forEach((t, i) =>
+      updates.push(updateDoc(doc(db, "tareas", t.id), { order: i }))
+    );
+
+    destTasks.forEach((t, i) =>
       updates.push(
         updateDoc(doc(db, "tareas", t.id), {
-          status: destination.droppableId,
           order: i,
+          status: destCol,
         })
-      );
-    });
-
-    if (source.droppableId !== destination.droppableId) {
-      columnTasks.forEach((t, i) => {
-        updates.push(updateDoc(doc(db, "tareas", t.id), { order: i }));
-      });
-    }
+      )
+    );
 
     await Promise.all(updates);
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4">
-      <h1 className="text-2xl font-bold text-center mb-4">
+    <div className="min-h-screen bg-gray-100 p-4">
+      <h1 className="text-3xl font-bold text-center mb-6">
         Gestor de Tareas
       </h1>
 
-      {/* AGREGAR */}
+      {/* ➕ NUEVA TAREA */}
       <div className="flex justify-center gap-2 mb-6">
         <input
           value={newTask}
           onChange={(e) => setNewTask(e.target.value)}
           placeholder="Nueva tarea..."
-          className="border rounded px-3 py-2 w-64 bg-white"
+          className="border rounded p-2 w-64"
         />
         <button
           onClick={addTask}
-          className="bg-indigo-600 text-white px-4 py-2 rounded"
+          className="bg-blue-600 text-white px-4 py-2 rounded"
         >
           Agregar
         </button>
       </div>
 
-      <DragDropContext onDragEnd={onDragEnd}>
+      <DragDropContext onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {Object.entries(columns).map(([key, col]) => (
-            <Droppable droppableId={key} key={key}>
-              {(provided) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                  className={`${col.bg} rounded-xl p-3 min-h-[350px]`}
-                >
-                  <h2 className="font-semibold text-center mb-3">
-                    {col.title}
-                  </h2>
+          {columns.map((col) => {
+            const colTasks = tasks
+              .filter((t) => t.status === col.id)
+              .sort((a, b) => a.order - b.order);
 
-                  {tasks
-                    .filter((t) => t.status === key)
-                    .map((task, index) => (
+            return (
+              <Droppable droppableId={col.id} key={col.id}>
+                {(provided) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    className={`p-4 rounded shadow min-h-[300px] ${col.color}`}
+                  >
+                    <h2 className="text-xl font-semibold mb-3">
+                      {col.title}
+                    </h2>
+
+                    {colTasks.map((task, index) => (
                       <Draggable
                         key={task.id}
                         draggableId={task.id}
                         index={index}
                       >
-                        {(provided, snapshot) => (
+                        {(provided) => (
                           <div
                             ref={provided.innerRef}
                             {...provided.draggableProps}
                             {...provided.dragHandleProps}
-                            style={provided.draggableProps.style}
-                            className={`${col.card} p-3 mb-2 rounded-lg shadow ${
-                              snapshot.isDragging ? "opacity-90 scale-[1.02]" : ""
-                            }`}
+                            className="bg-white/80 backdrop-blur p-3 rounded mb-2 shadow cursor-grab active:cursor-grabbing"
                           >
                             {task.title}
                           </div>
@@ -195,11 +157,12 @@ export default function App() {
                       </Draggable>
                     ))}
 
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          ))}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            );
+          })}
         </div>
       </DragDropContext>
     </div>

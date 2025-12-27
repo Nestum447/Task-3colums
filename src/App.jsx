@@ -1,146 +1,189 @@
 import { useState, useEffect } from "react";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
+/* =========================
+   🔥 FIREBASE CONFIG (TUYO)
+   ========================= */
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyD5iLXD-lyu6PZ0x0LrmK9khxWqrPPlPcA",
+  authDomain: "gestor-tareas-36fc5.firebaseapp.com",
+  projectId: "gestor-tareas-36fc5",
+  storageBucket: "gestor-tareas-36fc5.firebasestorage.app",
+  messagingSenderId: "326368524776",
+  appId: "1:326368524776:web:531cea029c0afde8b28c5d",
+  measurementId: "G-667RSDXM8Q",
+};
+
+// Inicializar Firebase
+const app = initializeApp(firebaseConfig);
+getAnalytics(app); // opcional
+const db = getFirestore(app);
+
+/* =========================
+   🚀 APP
+   ========================= */
 export default function App() {
-
-  // ---------------------------
-  //   LOCAL STORAGE: CARGAR
-  // ---------------------------
-  const loadTasks = () => {
-    const saved = localStorage.getItem("tasks-board");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  };
-
-  const [tasks, setTasks] = useState(
-    loadTasks() || {
-      todo: [
-        { id: "1", text: "Tarea 1", completed: false },
-        { id: "2", text: "Tarea 2", completed: false },
-      ],
-      proceso: [{ id: "3", text: "Tarea 3 en proceso", completed: false }],
-      delegadas: [{ id: "4", text: "Tarea delegada", completed: false }],
-    }
-  );
+  const [tasks, setTasks] = useState({
+    todo: [],
+    proceso: [],
+    delegadas: [],
+  });
 
   const [newTask, setNewTask] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  // ---------------------------
-  //   LOCAL STORAGE: GUARDAR
-  // ---------------------------
+  /* ---------------------------
+     CARGAR DESDE FIRESTORE
+     --------------------------- */
   useEffect(() => {
-    localStorage.setItem("tasks-board", JSON.stringify(tasks));
-  }, [tasks]);
+    const loadTasks = async () => {
+      try {
+        const ref = doc(db, "boards", "main");
+        const snap = await getDoc(ref);
 
-  // ---------------------------
-  //   BORRAR TAREA (CANASTA)
-  // ---------------------------
-  const deleteTask = (id) => {
-    setTasks((prev) => {
-      const newState = { ...prev };
-      for (const col in newState) {
-        newState[col] = newState[col].filter((t) => t.id !== id);
+        if (snap.exists()) {
+          setTasks(snap.data().tasks);
+        } else {
+          const initialData = {
+            tasks: {
+              todo: [
+                { id: "1", text: "Tarea 1", completed: false },
+                { id: "2", text: "Tarea 2", completed: false },
+              ],
+              proceso: [
+                { id: "3", text: "Tarea en proceso", completed: false },
+              ],
+              delegadas: [
+                { id: "4", text: "Tarea delegada", completed: false },
+              ],
+            },
+          };
+          await setDoc(ref, initialData);
+          setTasks(initialData.tasks);
+        }
+      } catch (error) {
+        console.error("Error cargando Firebase", error);
+      } finally {
+        setLoading(false);
       }
-      return newState;
-    });
-  };
+    };
 
-  // ---------------------------
-  //   MARCAR / DESMARCAR COMPLETADA
-  // ---------------------------
-  const toggleComplete = (id) => {
-    setTasks((prev) => {
-      const newState = { ...prev };
-      for (const col in newState) {
-        newState[col] = newState[col].map((t) =>
-          t.id === id ? { ...t, completed: !t.completed } : t
-        );
+    loadTasks();
+  }, []);
+
+  /* ---------------------------
+     GUARDAR EN FIRESTORE
+     --------------------------- */
+  useEffect(() => {
+    if (loading) return;
+
+    const saveTasks = async () => {
+      try {
+        await setDoc(doc(db, "boards", "main"), { tasks });
+      } catch (error) {
+        console.error("Error guardando Firebase", error);
       }
-      return newState;
-    });
-  };
+    };
 
-  // ---------------------------
-  //   DRAG & DROP (CORREGIDO)
-  // ---------------------------
-  const handleDragEnd = (result) => {
-    const sourceColumn = result.source.droppableId;
+    saveTasks();
+  }, [tasks, loading]);
 
-    if (!result.destination) {
-      setTasks((prev) => ({
-        ...prev,
-        [sourceColumn]: prev[sourceColumn].filter(
-          (t, index) => index !== result.source.index
-        ),
-      }));
-      return;
-    }
-
-    const destColumn = result.destination.droppableId;
-
-    // 🟦 REORDENAR SIN DUPLICAR SI ES LA MISMA COLUMNA
-    if (sourceColumn === destColumn) {
-      const columnTasks = Array.from(tasks[sourceColumn]);
-
-      const [movedTask] = columnTasks.splice(result.source.index, 1);
-      columnTasks.splice(result.destination.index, 0, movedTask);
-
-      setTasks({
-        ...tasks,
-        [sourceColumn]: columnTasks,
-      });
-
-      return;
-    }
-
-    // 🟩 SI ES ENTRE COLUMNAS → MOVER NORMAL
-    const sourceTasks = Array.from(tasks[sourceColumn]);
-    const destTasks = Array.from(tasks[destColumn]);
-
-    const [movedTask] = sourceTasks.splice(result.source.index, 1);
-    destTasks.splice(result.destination.index, 0, movedTask);
-
-    setTasks({
-      ...tasks,
-      [sourceColumn]: sourceTasks,
-      [destColumn]: destTasks,
-    });
-  };
-
-  // ---------------------------
-  //   AGREGAR TAREA
-  // ---------------------------
+  /* ---------------------------
+     ACCIONES
+     --------------------------- */
   const addTask = () => {
     if (!newTask.trim()) return;
 
-    const newId = Date.now().toString();
-    const newItem = { id: newId, text: newTask, completed: false };
-
     setTasks({
       ...tasks,
-      todo: [...tasks.todo, newItem],
+      todo: [
+        ...tasks.todo,
+        {
+          id: Date.now().toString(),
+          text: newTask,
+          completed: false,
+        },
+      ],
     });
 
     setNewTask("");
   };
 
-  // ---------------------------
-  //   UI
-  // ---------------------------
+  const deleteTask = (id) => {
+    setTasks((prev) => {
+      const updated = { ...prev };
+      for (const col in updated) {
+        updated[col] = updated[col].filter((t) => t.id !== id);
+      }
+      return updated;
+    });
+  };
+
+  const toggleComplete = (id) => {
+    setTasks((prev) => {
+      const updated = { ...prev };
+      for (const col in updated) {
+        updated[col] = updated[col].map((t) =>
+          t.id === id ? { ...t, completed: !t.completed } : t
+        );
+      }
+      return updated;
+    });
+  };
+
+  /* ---------------------------
+     DRAG & DROP
+     --------------------------- */
+  const handleDragEnd = (result) => {
+    if (!result.destination) return;
+
+    const source = result.source.droppableId;
+    const dest = result.destination.droppableId;
+
+    if (source === dest) {
+      const items = Array.from(tasks[source]);
+      const [moved] = items.splice(result.source.index, 1);
+      items.splice(result.destination.index, 0, moved);
+      setTasks({ ...tasks, [source]: items });
+      return;
+    }
+
+    const sourceItems = Array.from(tasks[source]);
+    const destItems = Array.from(tasks[dest]);
+
+    const [moved] = sourceItems.splice(result.source.index, 1);
+    destItems.splice(result.destination.index, 0, moved);
+
+    setTasks({
+      ...tasks,
+      [source]: sourceItems,
+      [dest]: destItems,
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-xl">
+        Cargando datos...
+      </div>
+    );
+  }
+
+  /* ---------------------------
+     UI
+     --------------------------- */
   return (
     <div className="min-h-screen bg-gray-100 p-6">
-      <h1 className="text-3xl font-bold text-center mb-6">Gestor de Tareas</h1>
+      <h1 className="text-3xl font-bold text-center mb-6">
+        Gestor de Tareas (Firebase)
+      </h1>
 
-      {/* Input para nueva tarea */}
       <div className="flex justify-center mb-6 gap-2">
         <input
-          type="text"
           className="border border-gray-400 rounded p-2 w-64"
           placeholder="Nueva tarea..."
           value={newTask}
@@ -156,161 +199,61 @@ export default function App() {
 
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {["todo", "proceso", "delegadas"].map((col) => (
+            <Droppable key={col} droppableId={col}>
+              {(provided) => (
+                <div
+                  ref={provided.innerRef}
+                  {...provided.droppableProps}
+                  className="bg-white p-4 rounded shadow min-h-[300px]"
+                >
+                  <h2 className="text-xl font-semibold mb-3 capitalize">
+                    {col}
+                  </h2>
 
-          {/* Columna To Do */}
-          <Droppable droppableId="todo">
-            {(provided) => (
-              <div
-                className="bg-white p-4 rounded shadow min-h-[300px]"
-                ref={provided.innerRef}
-                {...provided.droppableProps}
-              >
-                <h2 className="text-xl font-semibold mb-3 text-blue-700">To Do</h2>
-
-                {tasks.todo.map((task, index) => (
-                  <Draggable key={task.id} draggableId={task.id} index={index}>
-                    {(provided) => (
-                      <div
-                        className="flex items-center justify-between p-3 bg-blue-100 rounded mb-2 shadow cursor-grab active:cursor-grabbing"
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={task.completed}
-                          onChange={() => toggleComplete(task.id)}
-                          className="mr-2"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-
-                        <span className={task.completed ? "line-through text-gray-600" : ""}>
-                          {task.text}
-                        </span>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteTask(task.id);
-                          }}
-                          className="text-red-600 text-xl ml-2"
+                  {tasks[col].map((task, index) => (
+                    <Draggable
+                      key={task.id}
+                      draggableId={task.id}
+                      index={index}
+                    >
+                      {(provided) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          {...provided.dragHandleProps}
+                          className="flex items-center justify-between p-3 bg-gray-100 rounded mb-2"
                         >
-                          🗑️
-                        </button>
-                      </div>
-                    )}
-                  </Draggable>
-                ))}
+                          <input
+                            type="checkbox"
+                            checked={task.completed}
+                            onChange={() => toggleComplete(task.id)}
+                          />
+                          <span
+                            className={
+                              task.completed
+                                ? "line-through text-gray-500"
+                                : ""
+                            }
+                          >
+                            {task.text}
+                          </span>
+                          <button
+                            onClick={() => deleteTask(task.id)}
+                            className="text-red-600"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
 
-                {provided.placeholder}
-              </div>
-            )}
-          </Droppable>
-
-          {/* Columna Proceso */}
-          <Droppable droppableId="proceso">
-            {(provided) => (
-              <div
-                className="bg-white p-4 rounded shadow min-h-[300px]"
-                ref={provided.innerRef}
-                {...provided.droppableProps}
-              >
-                <h2 className="text-xl font-semibold mb-3 text-yellow-600">
-                  En Proceso
-                </h2>
-
-                {tasks.proceso.map((task, index) => (
-                  <Draggable key={task.id} draggableId={task.id} index={index}>
-                    {(provided) => (
-                      <div
-                        className="flex items-center justify-between p-3 bg-yellow-100 rounded mb-2 shadow cursor-grab active:cursor-grabbing"
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={task.completed}
-                          onChange={() => toggleComplete(task.id)}
-                          className="mr-2"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-
-                        <span className={task.completed ? "line-through text-gray-600" : ""}>
-                          {task.text}
-                        </span>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteTask(task.id);
-                          }}
-                          className="text-red-600 text-xl ml-2"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    )}
-                  </Draggable>
-                ))}
-
-                {provided.placeholder}
-              </div>
-            )}
-          </Droppable>
-
-          {/* Columna Delegadas */}
-          <Droppable droppableId="delegadas">
-            {(provided) => (
-              <div
-                className="bg-white p-4 rounded shadow min-h-[300px]"
-                ref={provided.innerRef}
-                {...provided.droppableProps}
-              >
-                <h2 className="text-xl font-semibold mb-3 text-green-700">
-                  Delegadas
-                </h2>
-
-                {tasks.delegadas.map((task, index) => (
-                  <Draggable key={task.id} draggableId={task.id} index={index}>
-                    {(provided) => (
-                      <div
-                        className="flex items-center justify-between p-3 bg-green-100 rounded mb-2 shadow cursor-grab active:cursor-grabbing"
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={task.completed}
-                          onChange={() => toggleComplete(task.id)}
-                          className="mr-2"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-
-                        <span className={task.completed ? "line-through text-gray-600" : ""}>
-                          {task.text}
-                        </span>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteTask(task.id);
-                          }}
-                          className="text-red-600 text-xl ml-2"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    )}
-                  </Draggable>
-                ))}
-
-                {provided.placeholder}
-              </div>
-            )}
-          </Droppable>
-
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          ))}
         </div>
       </DragDropContext>
     </div>

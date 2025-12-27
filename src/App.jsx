@@ -25,7 +25,7 @@ export default function App() {
   const [editingAssignee, setEditingAssignee] = useState("");
   const [editingDueDate, setEditingDueDate] = useState("");
 
-  /* 🔥 Firebase realtime */
+  /* 🔥 Firebase realtime (NO borra datos) */
   useEffect(() => {
     return onSnapshot(collection(db, "tareas"), (snap) => {
       const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -49,10 +49,10 @@ export default function App() {
       created: Date.now(),
     });
 
-    setNewTask(""); // ✅ input queda en blanco
+    setNewTask("");
   };
 
-  /* ☑️ Marcar / desmarcar */
+  /* ☑️ Completar */
   const toggleCompleted = async (task) => {
     await updateDoc(doc(db, "tareas", task.id), {
       completed: !task.completed,
@@ -79,9 +79,14 @@ export default function App() {
     await deleteDoc(doc(db, "tareas", task.id));
   };
 
-  /* 🔀 Drag & Drop (reordenar y mover) */
+  /* 🔀 Drag & Drop (estable y seguro) */
   const handleDragEnd = async ({ source, destination }) => {
     if (!destination) return;
+    if (
+      source.droppableId === destination.droppableId &&
+      source.index === destination.index
+    )
+      return;
 
     const src = source.droppableId;
     const dst = destination.droppableId;
@@ -170,98 +175,59 @@ export default function App() {
                             <div
                               ref={p.innerRef}
                               {...p.draggableProps}
-                              {...p.dragHandleProps}
-                              className={`bg-white/80 p-3 rounded mb-2 shadow border-l-4 ${
-                                overdue
-                                  ? "border-red-500"
-                                  : "border-transparent"
-                              }`}
+                              className="bg-white/80 p-3 rounded mb-2 shadow border-l-4 flex gap-2"
                             >
-                              <div className="flex justify-between items-start gap-3">
-                                {/* IZQUIERDA */}
-                                <div className="flex-1">
-                                  {editingId === task.id ? (
-                                    <>
-                                      <input
-                                        value={editingText}
-                                        onChange={(e) =>
-                                          setEditingText(e.target.value)
-                                        }
-                                        className="border rounded p-1 w-full mb-1"
-                                      />
-                                      <input
-                                        placeholder="Responsable"
-                                        value={editingAssignee}
-                                        onChange={(e) =>
-                                          setEditingAssignee(e.target.value)
-                                        }
-                                        className="border rounded p-1 w-full mb-1"
-                                      />
-                                      <input
-                                        type="date"
-                                        value={editingDueDate}
-                                        onChange={(e) =>
-                                          setEditingDueDate(e.target.value)
-                                        }
-                                        className="border rounded p-1 w-full"
-                                      />
-                                      <button
-                                        onClick={() => saveEdit(task)}
-                                        className="mt-2 text-blue-600 text-sm"
-                                      >
-                                        Guardar
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <div className="flex items-start gap-2">
-                                      {/* CHECKBOX */}
-                                      <input
-                                        type="checkbox"
-                                        checked={task.completed}
-                                        onChange={() =>
-                                          toggleCompleted(task)
-                                        }
-                                        onClick={(e) =>
-                                          e.stopPropagation()
-                                        }
-                                        className="mt-1"
-                                      />
+                              {/* HANDLE DE ARRASTRE */}
+                              <div
+                                {...p.dragHandleProps}
+                                className="cursor-grab select-none text-gray-400 hover:text-gray-600"
+                              >
+                                ☰
+                              </div>
 
-                                      <div className="flex-1">
+                              {/* CONTENIDO */}
+                              <div className="flex-1">
+                                <div className="flex justify-between gap-2">
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={task.completed}
+                                      onChange={() =>
+                                        toggleCompleted(task)
+                                      }
+                                    />
+
+                                    <div>
+                                      <p
+                                        className={`font-medium ${
+                                          task.completed
+                                            ? "line-through text-gray-500"
+                                            : ""
+                                        }`}
+                                      >
+                                        {task.title}
+                                      </p>
+
+                                      {task.assignee && (
+                                        <p className="text-sm text-gray-600">
+                                          👤 {task.assignee}
+                                        </p>
+                                      )}
+
+                                      {task.dueDate && (
                                         <p
-                                          className={`font-medium ${
-                                            task.completed
-                                              ? "line-through text-gray-500"
-                                              : ""
+                                          className={`text-sm ${
+                                            overdue
+                                              ? "text-red-600 font-semibold"
+                                              : "text-gray-600"
                                           }`}
                                         >
-                                          {task.title}
+                                          📅 {task.dueDate}
                                         </p>
-
-                                        {task.assignee && (
-                                          <p className="text-sm text-gray-600">
-                                            👤 {task.assignee}
-                                          </p>
-                                        )}
-
-                                        {task.dueDate && (
-                                          <p
-                                            className={`text-sm ${
-                                              overdue
-                                                ? "text-red-600 font-semibold"
-                                                : "text-gray-600"
-                                            }`}
-                                          >
-                                            📅 {task.dueDate}
-                                          </p>
-                                        )}
-                                      </div>
+                                      )}
                                     </div>
-                                  )}
-                                </div>
+                                  </div>
 
-                                {/* DERECHA - ICONOS */}
-                                {editingId !== task.id && (
                                   <div className="flex gap-2 text-lg">
                                     <button
                                       onClick={() => {
@@ -277,14 +243,13 @@ export default function App() {
                                     >
                                       ✏️
                                     </button>
-
                                     <button
                                       onClick={() => removeTask(task)}
                                     >
                                       🗑️
                                     </button>
                                   </div>
-                                )}
+                                </div>
                               </div>
                             </div>
                           )}
@@ -302,4 +267,4 @@ export default function App() {
       </DragDropContext>
     </div>
   );
-    }
+}

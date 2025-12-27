@@ -25,7 +25,7 @@ export default function App() {
   const [editingAssignee, setEditingAssignee] = useState("");
   const [editingDueDate, setEditingDueDate] = useState("");
 
-  /* 🔥 Firebase realtime (NO borra datos) */
+  /* 🔥 Firebase realtime (NO BORRA DATOS) */
   useEffect(() => {
     return onSnapshot(collection(db, "tareas"), (snap) => {
       const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -49,7 +49,7 @@ export default function App() {
       created: Date.now(),
     });
 
-    setNewTask("");
+    setNewTask(""); // input limpio
   };
 
   /* ☑️ Completar */
@@ -79,14 +79,9 @@ export default function App() {
     await deleteDoc(doc(db, "tareas", task.id));
   };
 
-  /* 🔀 Drag & Drop (estable y seguro) */
+  /* 🔀 Drag & Drop (SUAVE + SEGURO) */
   const handleDragEnd = async ({ source, destination }) => {
     if (!destination) return;
-    if (
-      source.droppableId === destination.droppableId &&
-      source.index === destination.index
-    )
-      return;
 
     const src = source.droppableId;
     const dst = destination.droppableId;
@@ -170,86 +165,136 @@ export default function App() {
                           key={task.id}
                           draggableId={task.id}
                           index={index}
+                          isDragDisabled={editingId === task.id}
                         >
                           {(p) => (
                             <div
                               ref={p.innerRef}
                               {...p.draggableProps}
-                              className="bg-white/80 p-3 rounded mb-2 shadow border-l-4 flex gap-2"
+                              className={`bg-white/80 p-3 rounded mb-2 shadow border-l-4 flex gap-2 ${
+                                overdue
+                                  ? "border-red-500"
+                                  : "border-transparent"
+                              }`}
                             >
-                              {/* HANDLE DE ARRASTRE */}
+                              {/* HANDLE */}
                               <div
                                 {...p.dragHandleProps}
-                                className="cursor-grab select-none text-gray-400 hover:text-gray-600"
+                                className="cursor-grab text-gray-400 select-none pt-1"
                               >
                                 ☰
                               </div>
 
                               {/* CONTENIDO */}
                               <div className="flex-1">
-                                <div className="flex justify-between gap-2">
-                                  <div className="flex gap-2">
+                                {editingId === task.id ? (
+                                  <div className="space-y-1">
                                     <input
-                                      type="checkbox"
-                                      checked={task.completed}
-                                      onChange={() =>
-                                        toggleCompleted(task)
+                                      value={editingText}
+                                      onChange={(e) =>
+                                        setEditingText(e.target.value)
                                       }
+                                      className="border rounded p-1 w-full"
+                                    />
+                                    <input
+                                      placeholder="Responsable"
+                                      value={editingAssignee}
+                                      onChange={(e) =>
+                                        setEditingAssignee(e.target.value)
+                                      }
+                                      className="border rounded p-1 w-full"
+                                    />
+                                    <input
+                                      type="date"
+                                      value={editingDueDate}
+                                      onChange={(e) =>
+                                        setEditingDueDate(e.target.value)
+                                      }
+                                      className="border rounded p-1 w-full"
                                     />
 
-                                    <div>
-                                      <p
-                                        className={`font-medium ${
-                                          task.completed
-                                            ? "line-through text-gray-500"
-                                            : ""
-                                        }`}
+                                    <div className="flex gap-2 mt-2">
+                                      <button
+                                        onClick={() => saveEdit(task)}
+                                        className="text-blue-600 text-sm"
                                       >
-                                        {task.title}
-                                      </p>
-
-                                      {task.assignee && (
-                                        <p className="text-sm text-gray-600">
-                                          👤 {task.assignee}
-                                        </p>
-                                      )}
-
-                                      {task.dueDate && (
-                                        <p
-                                          className={`text-sm ${
-                                            overdue
-                                              ? "text-red-600 font-semibold"
-                                              : "text-gray-600"
-                                          }`}
-                                        >
-                                          📅 {task.dueDate}
-                                        </p>
-                                      )}
+                                        Guardar
+                                      </button>
+                                      <button
+                                        onClick={() => setEditingId(null)}
+                                        className="text-gray-500 text-sm"
+                                      >
+                                        Cancelar
+                                      </button>
                                     </div>
                                   </div>
+                                ) : (
+                                  <div className="flex justify-between gap-2">
+                                    <div className="flex gap-2">
+                                      <input
+                                        type="checkbox"
+                                        checked={task.completed}
+                                        onChange={() =>
+                                          toggleCompleted(task)
+                                        }
+                                        onClick={(e) =>
+                                          e.stopPropagation()
+                                        }
+                                      />
 
-                                  <div className="flex gap-2 text-lg">
-                                    <button
-                                      onClick={() => {
-                                        setEditingId(task.id);
-                                        setEditingText(task.title);
-                                        setEditingAssignee(
-                                          task.assignee || ""
-                                        );
-                                        setEditingDueDate(
-                                          task.dueDate || ""
-                                        );
-                                      }}
-                                    >
-                                      ✏️
-                                    </button>
-                                    <button
-                                      onClick={() => removeTask(task)}
-                                    >
-                                      🗑️
-                                    </button>
+                                      <div>
+                                        <p
+                                          className={`font-medium ${
+                                            task.completed
+                                              ? "line-through text-gray-500"
+                                              : ""
+                                          }`}
+                                        >
+                                          {task.title}
+                                        </p>
+
+                                        {task.assignee && (
+                                          <p className="text-sm text-gray-600">
+                                            👤 {task.assignee}
+                                          </p>
+                                        )}
+
+                                        {task.dueDate && (
+                                          <p className="text-sm text-gray-600">
+                                            📅 {task.dueDate}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="flex gap-2 text-lg">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingId(task.id);
+                                          setEditingText(task.title);
+                                          setEditingAssignee(
+                                            task.assignee || ""
+                                          );
+                                          setEditingDueDate(
+                                            task.dueDate || ""
+                                          );
+                                        }}
+                                      >
+                                        ✏️
+                                      </button>
+
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          removeTask(task);
+                                        }}
+                                      >
+                                        🗑️
+                                      </button>
+                                    </div>
                                   </div>
-                                </div>
+                                )}
                               </div>
                             </div>
                           )}

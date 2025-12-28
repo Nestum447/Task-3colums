@@ -1,18 +1,19 @@
-📌 Gestor de Tareas — React + Drag & Drop + LocalStorage
+🗂️ Gestor de Tareas – Kanban (Tipo Trello)
 
-Aplicación interactiva de gestión de tareas con tres columnas:
+Aplicación web de gestión de tareas estilo Kanban / Trello, desarrollada con React + Vite, integrada con Firebase Firestore y desplegada en Vercel.
 
-To Do
+Permite crear, editar, eliminar, mover y reordenar tareas entre diferentes etapas, con persistencia en tiempo real.
 
-En Proceso
+🛠️ Tecnologías Usadas
 
-Delegadas
+⚛️ React 18
 
-Incluye:
+⚡ Vite
 
-✅ Arrastrar y soltar tareas entre columnas
-✅ Guardado automático en LocalStorage
-✅ Casilla para marcar tarea como completada (tachado)
-✅ Botón de canasta para eliminar
-✅ Interfaz sencilla y responsive
-✅ Funciona 100% en el navegador (sin backend)
+🔥 Firebase Firestore (Realtime)
+
+🎨 Tailwind CSS
+
+🧲 react-beautiful-dnd
+
+☁️ Vercel
